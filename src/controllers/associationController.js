@@ -5,7 +5,8 @@ export const createAssociation = async (req, res) => {
 
     const existingName  = await Association.findOne({name});
     if (existingName ) {
-        return res.status(400).json({ message: 'Association with this name already exists' });
+        res.status(400);
+        throw new Error('עמותה זו כבר קיימת');
     }
     const newAssociation = await Association.create({
         name,
@@ -13,7 +14,7 @@ export const createAssociation = async (req, res) => {
     });
 
     return res.status(201).json({
-        message: 'Association created successfully',
+        message: 'העמותה נוספה בהצלחה',
         association: newAssociation
     });
 }
