@@ -16,6 +16,7 @@ mongoose.connect(process.env.LOCAL_URI)
 .then(() => console.log('Connected to MongoDB 😍'))
 .catch(err => console.log({ error: err.message }));
 
+
 // הפעלת השרת
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
