@@ -1,7 +1,7 @@
 import express from 'express';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import { requireAdmin } from '../middleware/permissionMiddleware.js';
-import {asyncHandler} from '../middleware/asyncHandler.js';
+import  asyncHandler  from '../middleware/asyncHandler.js';
 import { addAssociationToUsers, createAssociation, getAllAssociations, getAssociatedEmployees } from '../controllers/associationController.js';
 
 
