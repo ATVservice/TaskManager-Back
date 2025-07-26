@@ -9,7 +9,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // רישום משתמש
 export const register = async (req, res) => {
   
-    const { userName, password, firstName, lastName, role, associations } = req.body;
+    const { userName, password, firstName, lastName, role, email } = req.body;
 
     const existingUser = await User.findOne({ userName });
     if (existingUser) {
@@ -26,7 +26,7 @@ export const register = async (req, res) => {
       firstName,
       lastName,
       role,
-      associations
+      email
     });
 
     return res.status(201).json({
