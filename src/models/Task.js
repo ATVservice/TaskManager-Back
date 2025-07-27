@@ -3,15 +3,16 @@ import mongoose from 'mongoose';
 const taskSchema = new mongoose.Schema({
   taskId: { type: Number, required: true, unique: true }, // מזהה עוקב פנימי
   creator: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // מקים המשימה
-  createdAt: { type: Date, default: Date.now }, // תאריך יצירה
-  dueDate: { type: Date }, // תאריך משימה
-  finalDeadline: { type: Date }, // תאריך יעד סופי
+  createdAt: { type: Date, default: Date.now}, // תאריך יצירה
+  dueDate: { type: Date ,required: true}, // תאריך משימה
+  finalDeadline: { type: Date ,required: true}, // תאריך יעד סופי
   updatedAt: { type: Date, default: Date.now }, // תאריך עדכון
   title: { type: String, required: true }, // כותרת
   details: { type: String }, // פרטים
   importance: {
     type: String,
     enum: ['מיידי', 'מגירה', 'תאריך', 'כללי', 'עקביות'],
+    required: true
   },
   subImportance: {
     type: String,
@@ -21,18 +22,19 @@ const taskSchema = new mongoose.Schema({
     type: String,
     enum: ['בתהליך', 'הושלם', 'מושהה', 'בטיפול', 'בוטלה'],
     default: 'בתהליך',
+    required: true
   },
   statusNote: { type: String },
   failureReason: { type: String },
   followUp: { type: String },
   daysOpen: { type: Number, default: 0 },
-  organization: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Association' }],
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Association' ,required: true},
   project: { type: String },
   isRecurringInstance: { type: Boolean, default: false },
   isDeleted: { type: Boolean, default: false },
 
-  mainAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  assignees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  mainAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' ,required: true },
+  assignees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' ,required: true }],
 
   updatesHistory: [{
     date: Date,

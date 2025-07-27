@@ -8,6 +8,7 @@ const recurringTaskSchema = new mongoose.Schema({
   importance: {
     type: String,
     enum: ['מיידי', 'מגירה', 'תאריך', 'כללי', 'עקביות'],
+    required: true 
   },
   subImportance: {
     type: String,
@@ -17,11 +18,12 @@ const recurringTaskSchema = new mongoose.Schema({
     type: String,
     enum: ['בתהליך', 'הושלם', 'מושהה', 'בטיפול', 'בוטלה'],
     default: 'בתהליך',
+    required: true 
   },
-  organization: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Association' }],
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Association' , required: true  },
   project: { type: String },
-  mainAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  assignees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  mainAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' ,required: true },
+  assignees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' , required: true }],
 
   frequencyType: {
     type: String,
@@ -29,11 +31,11 @@ const recurringTaskSchema = new mongoose.Schema({
     required: true,
   },
   frequencyDetails: {
-    days: [Number], // לדוג' [0,2,4] עבור ימי ראשון, שלישי, חמישי
+    includingFriday: Boolean, // ליומי
+    days: [Number], //ליומי פרטני: לדוג' [1,3,5] עבור ימי ראשון, שלישי, חמישי 
     dayOfMonth: Number, // עבור חודשי
     day: Number, // עבור שנתי (יום)
     month: Number, // עבור שנתי (חודש)
-    includeFridays: { type: Boolean } // ליומי
   },
 
   nextRunDate: { type: Date }, // למעקב מתי לרנדר אותה שוב

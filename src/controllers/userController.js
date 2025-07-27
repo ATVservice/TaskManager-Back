@@ -25,3 +25,15 @@ export const updateUser = async (req, res) => {
     res.status(200).json(updatedUser);
 
 };
+
+  export const getUserNamesEmployees = async (req, res) => {
+    try {
+      const employees = await User.find({ role: 'עובד' }).select('userName -_id');
+      const names = employees.map(emp => emp.userName);
+      return res.status(200).json(names);
+    } catch (error) {
+      return res.status(500).json({ error: 'שגיאה בעת שליפת העובדים' });
+    }
+  };
+  
+  

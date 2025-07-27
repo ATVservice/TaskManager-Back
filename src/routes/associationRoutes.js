@@ -8,7 +8,7 @@ import { addAssociationToUsers, createAssociation, getAllAssociations, getAssoci
 const router = express.Router();
 
 router.post('/createAssociation',authMiddleware, requireAdmin, asyncHandler(createAssociation));
-router.get('/getAllAssociations',authMiddleware, requireAdmin, asyncHandler(getAllAssociations));
+router.get('/getAllAssociations',authMiddleware, asyncHandler(getAllAssociations));
 router.get('/getAssociated/:associationId',authMiddleware, requireAdmin, asyncHandler(getAssociatedEmployees));
 router.put('/addAssociationToUsers', authMiddleware, requireAdmin, asyncHandler(addAssociationToUsers));
 
