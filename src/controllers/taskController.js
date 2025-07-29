@@ -97,6 +97,7 @@ export const createTask = async (req, res) => {
     }
 };
 
+  
 export const getTasks = async (req, res) => {
 
     const userId = req.user._id;
@@ -117,7 +118,7 @@ export const getTasks = async (req, res) => {
     }
 
     const tasks = await Task.find(filter)
-        .select('_id taskId title organization mainAssignee status importance')
+        .select('_id taskId title organization mainAssignee status')
         .populate('mainAssignee', 'userName')
         .populate('organization', 'name')
 
@@ -132,7 +133,7 @@ export const getMoreDetails = async (req, res) => {
         const { _id } = req.params;
 
         const task = await Task.findOne({ _id })
-            .select('assignees subImportance creator dueDate finalDeadline daysOpen createdAt project details mainAssignee')
+            .select('assignees importance subImportance creator dueDate finalDeadline daysOpen createdAt project details mainAssignee')
             .populate('assignees', 'userName')
             .populate('creator', 'userName');
 
