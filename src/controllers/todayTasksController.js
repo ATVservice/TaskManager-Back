@@ -55,23 +55,33 @@ export const getTodayTasks = async (req, res) => {
     const userId = req.user._id;
     const isAdmin = req.user.role === 'מנהל';
 
-    let filter = { isDeleted: false };
+    const { isRecurringInstance } = req.query;
+
+    const filter = {};
 
     if (!isAdmin) {
-        filter = {
-            ...filter,
-            $or: [
-                { mainAssignee: userId },
-                { assignees: userId }
-            ]
-        };
+        filter.$or = [
+            { mainAssignee: userId },
+            { assignees: userId },
+            { creator: userId }
+        ];
+    }
+
+    if (isRecurringInstance === 'true') {
+        filter.isRecurringInstance = true;
+    } else if (isRecurringInstance === 'false') {
+        filter.isRecurringInstance = false;
     }
 
     const tasks = await TodayTask.find(filter)
+        .select('_id taskId title organization mainAssignee status')
         .populate('assignees', 'userName')
         .populate('mainAssignee', 'userName')
         .populate('organization', 'name')
+        .populate('creator', 'userName');
+
 
     res.status(200).json(tasks);
-
 };
+
+

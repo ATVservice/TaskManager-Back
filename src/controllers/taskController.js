@@ -3,6 +3,8 @@ import RecurringTask from '../models/RecurringTask.js';
 import User from '../models/User.js';
 import getNextTaskId from '../utils/getNextTaskId.js';
 import mongoose, { now } from 'mongoose';
+import dayjs from 'dayjs';
+
 
 export const createTask = async (req, res) => {
     try {
@@ -105,19 +107,22 @@ export const getTasks = async (req, res) => {
     console.log("userId", userId);
     console.log("isAdmin", isAdmin);
 
-    let filter = { isDeleted: false };
+    const today = dayjs().startOf('day').toDate();
 
+    let baseFilter = {
+      isDeleted: false,
+      dueDate: { $gt: today }  // משימות עתידיות בלבד
+    };
+  
     if (!isAdmin) {
-        filter = {
-            ...filter,
-            $or: [
-                { mainAssignee: userId },
-                { assignees: userId }
-            ]
-        };
+      baseFilter.$or = [
+        { mainAssignee: userId },
+        { assignees: userId },
+        { creator: userId } 
+      ];
     }
 
-    const tasks = await Task.find(filter)
+    const tasks = await Task.find(baseFilter)
         .select('_id taskId title organization mainAssignee status')
         .populate('mainAssignee', 'userName')
         .populate('organization', 'name')

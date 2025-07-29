@@ -4,6 +4,7 @@ const todayTaskSchema = new mongoose.Schema({
   taskId: { type: Number, required: true }, // מספר משימה פנימי (גם לקבועות וגם לחד"פ)
   sourceTaskId: { type: mongoose.Schema.Types.ObjectId, required: true }, // הפניה למשימה המקורית - RecurringTask או Task
   isRecurringInstance: { type: Boolean, default: false }, // אם נוצר ממשימה קבועה
+  creator: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // מקים המשימה
 
   title: { type: String, required: true },
   details: { type: String },
