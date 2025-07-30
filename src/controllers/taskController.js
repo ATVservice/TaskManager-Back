@@ -112,9 +112,14 @@ export const getTasks = async (req, res) => {
 
     let baseFilter = {
       isDeleted: false,
-      dueDate: { $gt: today }  // משימות עתידיות בלבד
+      dueDate: { $gt: today }, // משימות עתידיות בלבד
+      $expr: { 
+        $not: { 
+          $in: [ userId, { $ifNull: ["$hiddenFrom", []] } ] 
+        } 
+      }
     };
-  
+    
     if (!isAdmin) {
       baseFilter.$or = [
         { mainAssignee: userId },
@@ -189,11 +194,12 @@ export const duplicateTask = async (req, res) => {
         throw new Error('לשכפול taskId יש לספק');
       }
   
-      const originalTask = await Task.findOne({ taskId: taskId }).lean();
+      const originalTask = await Task.findOne({ _id: taskId }).lean();
+
   
       if (!originalTask) {
-        res.status(404);
-        throw new Error('המשימה לשכפול לא נמצאה');
+        res.status(400);
+        throw new Error('לא ניתן לשכפל משימה קבועה');
       }
   
       // יצירת מזהה חדש למשימה

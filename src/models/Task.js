@@ -32,6 +32,9 @@ const taskSchema = new mongoose.Schema({
   project: { type: String },
   isRecurringInstance: { type: Boolean, default: false },
   isDeleted: { type: Boolean, default: false },
+  deletedAt: { type: Date },
+  deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  hiddenFrom: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // משימות מוסתרות למשתמשים מסוימים
 
   mainAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' ,required: true },
   assignees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' ,required: true }],

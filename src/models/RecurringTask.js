@@ -8,7 +8,7 @@ const recurringTaskSchema = new mongoose.Schema({
   importance: {
     type: String,
     enum: ['מיידי', 'מגירה', 'תאריך', 'כללי', 'עקביות'],
-    required: true 
+    required: true
   },
   subImportance: {
     type: String,
@@ -18,12 +18,12 @@ const recurringTaskSchema = new mongoose.Schema({
     type: String,
     enum: ['בתהליך', 'הושלם', 'מושהה', 'בטיפול', 'בוטלה'],
     default: 'בתהליך',
-    required: true 
+    required: true
   },
-  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Association' , required: true  },
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Association', required: true },
   project: { type: String },
-  mainAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' ,required: true },
-  assignees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' , required: true }],
+  mainAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  assignees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }],
 
   frequencyType: {
     type: String,
@@ -39,7 +39,16 @@ const recurringTaskSchema = new mongoose.Schema({
   },
 
   nextRunDate: { type: Date }, // למעקב מתי לרנדר אותה שוב
-  isDeleted: { type: Boolean, default: false }
+  isDeleted: { type: Boolean, default: false },
+  deletedAt: { type: Date },
+  deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  hiddenFrom: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    updatesHistory: [{
+      date: Date,
+      user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      status: String,
+      note: String
+    }]
 });
 
 export default mongoose.model('RecurringTask', recurringTaskSchema);
