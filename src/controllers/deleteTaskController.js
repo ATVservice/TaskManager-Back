@@ -3,15 +3,9 @@ import RecurringTask from "../models/RecurringTask.js";
 import Task from "../models/Task.js";
 import TodayTask from "../models/TodayTask.js";
 import User from "../models/User.js";
-import bcrypt from "bcrypt";
+import validatePassword from "../utils/validatePassword.js";
 
-export const validatePassword = async (userId, password) => {
-    if (!password) return false;
-    const user = await User.findById(userId).select('+password');
-    if (!user || !user.password) return false;
-    return bcrypt.compare(password, user.password);
 
-}
 
 const handleSoftDelete = async ({ entity, entityType, userId, isAdmin, isCreator, isAssignee, res }) => {
     if (isAdmin || isCreator) {
