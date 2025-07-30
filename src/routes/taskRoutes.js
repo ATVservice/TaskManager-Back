@@ -8,6 +8,7 @@ import { getTodayTasks } from '../controllers/todayTasksController.js';
 
 const router = express.Router();
 
+
 router.post('/createTask',authMiddleware, asyncHandler(createTask));
 router.post('/duplicateTask',authMiddleware, asyncHandler(duplicateTask));
 router.get('/getTasks',authMiddleware, asyncHandler(getTasks));

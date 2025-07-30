@@ -46,7 +46,7 @@ export const getCompletedTasks = async (req, res) => {
     };
 
     const singleTasks = await Task.find(filter)
-        .select('_id taskId title organization mainAssignee status')
+        // .select('_id taskId title organization mainAssignee status')
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
@@ -84,7 +84,7 @@ export const getCancelledTasks = async (req, res) => {
 
 
     const singleTasks = await Task.find(filter)
-        .select('_id taskId title organization mainAssignee status')
+        // .select('_id taskId title organization mainAssignee status')
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
@@ -123,7 +123,7 @@ export const getDrawerTasks = async (req, res) => {
 
 
     const singleTasks = await Task.find(filter)
-        .select('_id taskId title organization mainAssignee status')
+        // .select('_id taskId title organization mainAssignee status')
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
@@ -151,7 +151,7 @@ export const getRecurringTasks = async (req, res) => {
     };
 
     const tasks = await RecurringTask.find(filter)
-        .select('_id taskId title organization mainAssignee status')
+        // .select('_id taskId title organization mainAssignee status')
         .populate('assignees', 'userName')
         .populate('mainAssignee', 'userName')
         .populate('organization', 'name')

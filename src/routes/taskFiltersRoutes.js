@@ -5,6 +5,7 @@ import { getCancelledTasks, getCompletedTasks, getDrawerTasks, getRecurringTasks
 
 const router = express.Router();
 
+
 router.get('/completed', authMiddleware, asyncHandler(getCompletedTasks));
 router.get('/cancelled', authMiddleware, asyncHandler(getCancelledTasks));
 router.get('/drawer', authMiddleware, asyncHandler(getDrawerTasks));

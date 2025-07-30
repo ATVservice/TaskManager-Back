@@ -51,6 +51,7 @@ export const refreshTodayTasks = async () => {
 
     await TodayTask.insertMany(allToday);
 };
+
 export const getTodayTasks = async (req, res) => {
     const userId = req.user._id;
     const isAdmin = req.user.role === 'מנהל';
@@ -74,7 +75,7 @@ export const getTodayTasks = async (req, res) => {
     }
 
     const tasks = await TodayTask.find(filter)
-        .select('_id taskId title organization mainAssignee status')
+        // .select('_id taskId title organization mainAssignee status')
         .populate('assignees', 'userName')
         .populate('mainAssignee', 'userName')
         .populate('organization', 'name')

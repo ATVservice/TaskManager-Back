@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import getNextTaskId from '../utils/getNextTaskId.js';
 import mongoose, { now } from 'mongoose';
 import dayjs from 'dayjs';
+import TodayTask from '../models/TodayTask.js';
 
 
 export const createTask = async (req, res) => {
@@ -32,7 +33,7 @@ export const createTask = async (req, res) => {
         }
 
         // שליפת המשתמשים לפי userName
-        const users = await User.find({ userName: { $in: assignees } });
+        const users = await User.find({ _id: { $in: assignees } });
         if (users.length !== assignees.length) {
             return res.status(400).json({ error: 'יש אחראים שלא קיימים במערכת' });
         }
@@ -41,7 +42,7 @@ export const createTask = async (req, res) => {
         const assigneeIds = users.map(user => user._id);
 
         // שליפת האחראי הראשי לפי userName
-        const mainAssigneeUser = users.find(user => user.userName === mainAssignee);
+        const mainAssigneeUser = users.find(user => user._id.toString() === mainAssignee);
         if (!mainAssigneeUser) {
             return res.status(400).json({ error: 'האחראי הראשי חייב להיות מתוך רשימת האחראים' });
         }
@@ -123,7 +124,7 @@ export const getTasks = async (req, res) => {
     }
 
     const tasks = await Task.find(baseFilter)
-        .select('_id taskId title organization mainAssignee status')
+        // .select('_id taskId title organization mainAssignee status')
         .populate('mainAssignee', 'userName')
         .populate('organization', 'name')
 
@@ -131,44 +132,55 @@ export const getTasks = async (req, res) => {
 
 
 };
+
+
 export const getMoreDetails = async (req, res) => {
-    try {
-        const userId = req.user._id;
-        const isAdmin = req.user.role === 'מנהל';
-        const { _id } = req.params;
+    const userId = req.user._id;
+    const isAdmin = req.user.role === 'מנהל';
+    const { _id } = req.params;
 
-        const task = await Task.findOne({ _id })
-            .select('assignees importance subImportance creator dueDate finalDeadline daysOpen createdAt project details mainAssignee')
-            .populate('assignees', 'userName')
-            .populate('creator', 'userName');
+    // חיפוש קודם כל ב-Task
+    let task = await Task.findOne({ _id })
+      .select('assignees importance subImportance creator dueDate finalDeadline daysOpen createdAt project details mainAssignee')
+      .populate('assignees', 'userName')
+      .populate('creator', 'userName')
+      .populate('mainAssignee', 'userName');
 
-        if (!task) {
-            res.status(404);
-            throw new Error('משימה לא נמצאה');
-        }
-
-        const userIdStr = userId.toString();
-        const creatorId = task.creator?._id?.toString();
-        const mainAssigneeId = task.mainAssignee?.toString();
-        const assigneeIds = task.assignees.map(a => a._id?.toString());
-
-        if (!isAdmin) {
-            if (
-                creatorId !== userIdStr &&
-                mainAssigneeId !== userIdStr &&
-                !assigneeIds.includes(userIdStr)
-            ) {
-                res.status(403);
-                throw new Error('אין לך הרשאה לצפות בפרטי משימה זו');
-            }
-        }
-
-        res.status(200).json(task);
-    } catch (err) {
-        console.error('שגיאה בשליפת פרטי משימה:', err);
-        res.status(500).json({ message: err.message || 'שגיאה לא ידועה' });
+    // אם לא נמצא, חפש ב-RecurringTask
+    if (!task) {
+      task = await RecurringTask.findOne({ _id })
+        .select('assignees importance subImportance creator daysOpen createdAt project details mainAssignee frequencyType frequencyDetails')
+        .populate('assignees', 'userName')
+        .populate('creator', 'userName')
+        .populate('mainAssignee', 'userName');
     }
-}
+
+    if (!task) {
+        res.status(404);
+        throw new Error('משימה לא נמצאה');
+    }
+
+    const userIdStr = userId.toString();
+    const creatorId = task.creator?._id?.toString();
+    const mainAssigneeId = task.mainAssignee?._id?.toString?.() || task.mainAssignee?.toString?.();
+    const assigneeIds = (task.assignees || []).map(a => a._id?.toString());
+
+    if (!isAdmin) {
+      const isAuthorized =
+        creatorId === userIdStr ||
+        mainAssigneeId === userIdStr ||
+        assigneeIds.includes(userIdStr);
+
+      if (!isAuthorized) {
+        res.status(403);
+        throw new Error('אין לך הרשאה לצפות בפרטי משימה זו')
+      }
+    }
+
+    res.status(200).json(task);
+
+};
+
 export const duplicateTask = async (req, res) => {
       const { taskId } = req.body;
   
