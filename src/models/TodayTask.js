@@ -16,6 +16,7 @@ const todayTaskSchema = new mongoose.Schema({
     default: 'בתהליך',
     required: true,
   },
+  
 
   dueDate: { type: Date }, // רק עבור חד"פ
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Association', required: true },

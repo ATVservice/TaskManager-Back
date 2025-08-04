@@ -4,6 +4,7 @@ import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
 import deleteTaskRoutes from './routes/deleteTaskRoutes.js';
+import updateTaskRoutes from './routes/updateTaskRoutes.js'
 import restoreTaskRoutes from './routes/restoreTaskRoutes.js'
 import taskFiltersRoutes from './routes/taskFiltersRoutes.js';
 import cors from 'cors';
@@ -26,6 +27,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/taskFilters', taskFiltersRoutes);
 app.use('/api/delete', deleteTaskRoutes);
 app.use('/api/restore', restoreTaskRoutes);
+app.use('/api/update',updateTaskRoutes);
 
 
 

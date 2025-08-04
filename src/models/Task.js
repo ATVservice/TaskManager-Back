@@ -24,7 +24,7 @@ const taskSchema = new mongoose.Schema({
     default: 'בתהליך',
     required: true
   },
-  statusNote: { type: String },
+  statusNote: { type: String , default:""},
   failureReason: { type: String },
   followUp: { type: String },
   daysOpen: { type: Number, default: 0 },

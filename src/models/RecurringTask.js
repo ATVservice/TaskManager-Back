@@ -14,6 +14,7 @@ const recurringTaskSchema = new mongoose.Schema({
     type: String,
     enum: ['דחוף', 'ממוספר', 'בהקדם האפשרי', 'לפי תאריך'],
   },
+  // קשור שיהיה פה סטטוס? לבדוק את זה!
   status: {
     type: String,
     enum: ['בתהליך', 'הושלם', 'מושהה', 'בטיפול', 'בוטלה'],
