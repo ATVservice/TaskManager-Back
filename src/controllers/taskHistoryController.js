@@ -31,13 +31,15 @@ export const getTaskHistory = async (req, res) => {
             query = {
                 taskId,
                 user: user._id,
-                field: { $regex: '^personal\\.' }
             };
         }
 
         const history = await TaskHistory.find(query)
             .sort({ date: -1 })
-            .populate('user', 'fullName');
+            .populate('user', 'userName')
+
+            
+
 
         res.json({ history });
 
