@@ -9,5 +9,4 @@ const router = express.Router();
 router.get('/getUserAlerts', authMiddleware, asyncHandler(getUserAlerts));
 router.post('/markRead', authMiddleware, asyncHandler(markRead));
 
-
 export default router;
