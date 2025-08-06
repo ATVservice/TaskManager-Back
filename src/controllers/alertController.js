@@ -110,3 +110,124 @@ const createAlertIfNotExists = async (type, taskId, userId) => {
         });
     }
 };
+// שליפת התרעות למשתמש
+export const getUserAlerts = async (req, res) => {
+
+    const user = req.user;
+    if (!user || !user._id) {
+      res.status(401);
+      throw new Error('משתמש לא מאומת');
+    }
+  
+    const userId = String(user._id);
+  
+    const {
+      resolved,
+      limit = 10,
+      skip = 0,
+      sortBy = 'createdAt',
+      order = 'desc'
+    } = req.query;
+  
+    const filter = { recipient: new mongoose.Types.ObjectId(userId) };
+  
+    if (resolved === 'true') filter.resolved = true;
+    else if (resolved === 'false') filter.resolved = false;
+  
+    const total = await Alert.countDocuments(filter);
+  
+    // קבע את כיוון המיון עבור שדות תאריכים
+    const sortOrder = order === 'asc' ? 1 : -1;
+  
+    // אם המשתמש לא סינן לפי resolved, נוסיף מיון ראשוני לפי resolved
+    // (false קודם => לא נקראו קודם)
+    const includeResolvedInSort = (resolved === undefined);
+  
+    if (sortBy === 'taskDueDate') {
+      // מיון לפי dueDate שנמצא בטבלה tasks — נשתמש ב-aggregate
+      // אם לא סיננו לפי resolved, נוסיף sort על resolved ראשון
+      const aggSort = {};
+      if (includeResolvedInSort) aggSort.resolved = 1; // false (0) יופיע קודם
+      aggSort['task.dueDate'] = sortOrder;
+      // לשם יציבות, נוסיף createdAt כסעיף משלים מהגבוה ביותר או הנמוך
+      aggSort.createdAt = -1;
+  
+      const aggPipeline = [
+        { $match: filter },
+        {
+          $lookup: {
+            from: 'tasks',
+            localField: 'task',
+            foreignField: '_id',
+            as: 'task'
+          }
+        },
+        { $unwind: { path: '$task', preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            task: {
+              _id: 1,
+              taskId: 1,
+              title: 1,
+              status: 1,
+              mainAssignee: 1,
+              organization: 1,
+              dueDate: '$task.dueDate'
+            },
+            type: 1,
+            recipient: 1,
+            createdAt: 1,
+            resolved: 1,
+            details: 1
+          }
+        },
+        { $sort: aggSort },
+        { $skip: Number(skip) },
+        { $limit: Number(limit) }
+      ];
+  
+      const alerts = await Alert.aggregate(aggPipeline);
+      return res.json({ total, count: alerts.length, alerts });
+    } else {
+
+      const sortStage = {};
+      if (includeResolvedInSort) {
+        sortStage.resolved = 1; // false קודם
+      }
+  
+      // הוספת שדה המיון העיקרי
+      if (sortBy === 'createdAt') {
+        sortStage.createdAt = sortOrder;
+      } else {
+        sortStage[sortBy] = sortOrder;
+        if (!sortStage.createdAt) sortStage.createdAt = -1;
+      }
+  
+      const alerts = await Alert.find(filter)
+        .sort(sortStage)
+        .skip(Number(skip))
+        .limit(Number(limit))
+        .populate({
+          path: 'task',
+          select: '_id taskId title status mainAssignee organization dueDate'
+        })
+        .lean();
+  
+      return res.json({ total, count: alerts.length, alerts });
+    }
+  
+  };
+// סימון התרעות שנקראו
+export const markRead = async (req, res) => {
+    
+      const { alertIds } = req.body;
+      if (!Array.isArray(alertIds) || alertIds.length === 0) {
+        res.status(400);
+        throw new Error("לא התקבלו התרעות")
+      }
+      const objectIds = alertIds.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
+      await Alert.updateMany({ _id: { $in: objectIds } }, { $set: { resolved: true } });
+      return res.json({ message: 'marked' });
+
+  }
+  
