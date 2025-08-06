@@ -1,4 +1,3 @@
-// controllers/updateTask.js
 import mongoose from 'mongoose';
 import Task from '../models/Task.js';
 import TaskHistory from '../models/TaskHistory.js';
@@ -7,15 +6,6 @@ import User from '../models/User.js';
 import Association from '../models/Association.js';
 import { getTaskPermissionLevel } from '../utils/taskPermissions.js';
 
-/**
- * Update task handler - supports:
- * - body possibly wrapped in { preparedForm: { ... } }
- * - conversion of organization/mainAssignee/assignees to ObjectId
- * - conversion of dueDate/finalDeadline to Date
- * - robust equality checks (ObjectId vs string, arrays, dates)
- * - limited permissions (personal updates) and full permissions
- * - audit history insertion (human-readable names for users/assocs)
- */
 export const updateTask = async (req, res) => {
   try {
     const { taskId } = req.params;
@@ -92,6 +82,23 @@ export const updateTask = async (req, res) => {
       return String(v);
     };
 
+    // ---------- helper: who can cancel ----------
+    const canCancelTask = (userObj, taskObj) => {
+      if (!userObj || !taskObj) return false;
+      // user role admin can cancel
+      if (userObj.role === 'מנהל') return true;
+
+      const userIdStr = String(userObj._id || userObj.id || userObj);
+      // creator can cancel
+      if (taskObj.creator && String(taskObj.creator) === userIdStr) return true;
+
+      // mainAssignee can cancel - task.mainAssignee might be object or id
+      const mainAssigneeId = taskObj.mainAssignee && (taskObj.mainAssignee._id ? String(taskObj.mainAssignee._id) : String(taskObj.mainAssignee));
+      if (mainAssigneeId && mainAssigneeId === userIdStr) return true;
+
+      return false;
+    };
+
     // ---------- limited-permission branch (personal updates only) ----------
     if (permission === 'limited') {
       const allowed = ['status', 'statusNote'];
@@ -103,6 +110,12 @@ export const updateTask = async (req, res) => {
       if (personalUpdates.status && !allowedStatuses.includes(personalUpdates.status)) {
         res.status(400);
         throw new Error(`הסטטוס "${personalUpdates.status}" אינו תקין`);
+      }
+
+      // NEW: disallow cancelling unless authorized
+      if (personalUpdates.status === 'בוטלה' && !canCancelTask(user, task)) {
+        res.status(403);
+        throw new Error('רק האחראי הראשי, מקים המשימה או המנהל יכולים לבטל משימה.');
       }
 
       if (Object.keys(personalUpdates).length === 0) {
@@ -148,6 +161,12 @@ export const updateTask = async (req, res) => {
         throw new Error(`הסטטוס "${incomingVal}" אינו תקין`);
       }
 
+      // NEW: if attempting to set status to 'בוטלה' enforce who can cancel
+      if (field === 'status' && incomingVal === 'בוטלה' && !canCancelTask(user, task)) {
+        res.status(403);
+        throw new Error('רק האחראי הראשי, מקים המשימה או המנהל יכולים לבטל משימה.');
+      }
+
       // special handling for IDs / arrays / dates
       if (field === 'organization' && incomingVal !== undefined && incomingVal !== null) {
         saveVal = toObjectId(incomingVal);
@@ -184,6 +203,37 @@ export const updateTask = async (req, res) => {
           before: stringifyForHistory(oldVal),
           after: stringifyForHistory(saveVal)
         });
+      }
+    }
+
+    // ---- NEW: if importance changed and is no longer "מיידי", remove subImportance ----
+    // We do this here (before save) so the DB won't keep the old subImportance value.
+    const importanceChange = changes.find(c => c.field === 'importance');
+    if (importanceChange) {
+      const newImportance = importanceChange.after; // string or null
+      // normalize to string
+      const newImportanceStr = newImportance === null ? null : String(newImportance);
+      if (newImportanceStr !== 'מיידי') {
+        const existingSub = task.get('subImportance');
+        if (existingSub !== undefined && existingSub !== null && existingSub !== '') {
+          // add history record for the removal
+          changes.push({
+            field: 'subImportance',
+            before: stringifyForHistory(existingSub),
+            after: null
+          });
+
+          // actually remove the field from the document so Mongoose will $unset it
+          try {
+            task.set('subImportance', undefined);
+            if (Object.prototype.hasOwnProperty.call(task, 'subImportance')) {
+              delete task.subImportance;
+            }
+            task.markModified && task.markModified('subImportance');
+          } catch (e) {
+            console.error('Failed to unset subImportance on task object:', e);
+          }
+        }
       }
     }
 
