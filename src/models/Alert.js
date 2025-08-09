@@ -10,7 +10,7 @@ const alertSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: [
-      'מגירה לא עודכנה 14 ימים',
+      'משימת מגירה לא עודכנה 14 ימים',
       'עבר המועד',
       'לא עודכן ע"י אחד האחראים',
       'משימה חד"פ לא הושלמה 30 ימים'
