@@ -7,6 +7,7 @@ import deleteTaskRoutes from './routes/deleteTaskRoutes.js';
 import updateTaskRoutes from './routes/updateTaskRoutes.js'
 import restoreTaskRoutes from './routes/restoreTaskRoutes.js'
 import taskFiltersRoutes from './routes/taskFiltersRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js'
 import alertRoutes from './routes/alertRoutes.js'
 import cors from 'cors';
 import errorHandler from './middleware/errorMiddleware.js';
@@ -30,6 +31,7 @@ app.use('/api/delete', deleteTaskRoutes);
 app.use('/api/restore', restoreTaskRoutes);
 app.use('/api/update',updateTaskRoutes);
 app.use('/api/alert',alertRoutes);
+app.use('/api/dashboard',dashboardRoutes)
 
 
 

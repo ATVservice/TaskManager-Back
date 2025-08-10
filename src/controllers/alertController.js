@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 
 export const generateAlerts = async () => {
     const now = new Date();
-    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    const fourteenDaysAgo = new Date(now.getTime() -14 * 24 * 60 * 60 * 1000);
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     // 1. התראות למשתמשים
@@ -18,7 +18,15 @@ export const generateAlerts = async () => {
 
     for (const task of staleDrawerTasks) {
         const creatorId = task.creator;
-        await createAlertIfNotExists('משימת מגירה לא עודכנה 14 ימים', task._id, creatorId);
+        await createAlertIfNotExists('משימת מגירה שהקמת לא עודכנה 14 ימים', task._id, creatorId);
+            // שליחת התראה לאחראי ראשי (mainAssignee)
+    if (task.mainAssignee) {
+        await createAlertIfNotExists(
+            'משימת מגירה שבאחריותך לא עודכנה 14 ימים',
+            task._id,
+            task.mainAssignee
+        );
+    }
     }
 
     const overdueTasks = await Task.find({
@@ -67,17 +75,6 @@ export const generateAlerts = async () => {
             );
         }
 
-        if (
-            task.importance === 'מגירה' &&
-            task.updatedAt < fourteenDaysAgo &&
-            task.mainAssignee
-        ) {
-            await createAlertIfNotExists(
-                'משימת מגירה לא עודכנה 14 ימים',
-                task._id,
-                task.mainAssignee
-            );
-        }
     }
 
     // 3. למנהל המערכת
