@@ -87,7 +87,7 @@ if (from && to) {
     // גרף התקדמות יומי וחודשי לפי updatedAt
     const groupFormat = groupBy === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD';
 
-    const dailyProgress = completedTasks.reduce((acc, task) => {
+    const progress = completedTasks.reduce((acc, task) => {
       const day = dayjs(task.updatedAt).format(groupFormat);
       if (!acc[day]) acc[day] = { date: day, completed: 0 };
       acc[day].completed++;
@@ -98,7 +98,7 @@ if (from && to) {
     res.json({
       completedCount,
       byImportance,
-      dailyProgress: Object.values(dailyProgress)
+      progress: Object.values(progress)
     });
 
   } catch (err) {
