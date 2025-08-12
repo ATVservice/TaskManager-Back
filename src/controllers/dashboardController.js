@@ -4,6 +4,7 @@ import RecurringTask from '../models/RecurringTask.js';
 import TaskAssigneeDetails from '../models/TaskAssigneeDetails.js';
 import mongoose from 'mongoose';
 import dayjs from 'dayjs';
+import Goal from '../models/Goal.js';
 
 const fetchTasksForUserRange = async (Model, userId, startDate, endDate) => {
     const tasks = await Model.find({
@@ -32,10 +33,17 @@ export const getUserPerformance = async (req, res) => {
     try {
         const userId = req.user._id;
         const { rangeType, from, to, groupBy = 'day' } = req.query;
-        console.log("rangeType",rangeType)
-        console.log("from",from)
-        console.log("to",to)
-        console.log("groupBy",groupBy)
+        console.log("rangeType", rangeType)
+        console.log("from", from)
+        console.log("to", to)
+        console.log("groupBy", groupBy)
+
+        const goals = await Goal.find({
+            $or: [
+                { targetType: 'כלל העובדים' },
+                { targetType: 'עובד בודד', employee: userId }
+            ]
+        });
 
 
         let startDate, endDate;
@@ -73,6 +81,42 @@ export const getUserPerformance = async (req, res) => {
 
         const allTasks = [...normalTasks, ...todayTasks, ...recurringTasks];
 
+
+        const goalProgress = goals.map(goal => {
+            // סינון משימות שהושלמו בהתאם ליעד
+            const matchedTasks = allTasks.filter(task => {
+                // בדוק תכונות המשימה מול היעד, לדוגמה חשיבות ותדירות
+                if (task.importance !== goal.importance) return false;
+                if (task.finalStatus !== 'הושלם') return false;  // הוספת סינון לסטטוס הושלם
+                if (goal.targetType === 'עובד בודד' && String(goal.employee) !== String(userId)) {
+                    return false; // לא של העובד הנוכחי
+                }
+                // תוכל להוסיף גם בדיקת תדירות אם יש לך שדה כזה במשימות
+                // לדוגמה, תדירות שבועית – לבדוק שהתאריך נכנס לטווח הנכון
+                const updatedAt = dayjs(task.updatedAt);
+                if (updatedAt.isBefore(dayjs(startDate)) || updatedAt.isAfter(dayjs(endDate))) return false;
+                return true;
+            });
+
+            const completedCount = matchedTasks.length;
+
+            // חישוב אחוז עמידה (מקסימום 100%)
+            const percentAchieved = goal.targetCount > 0
+                ? Math.min((completedCount / goal.targetCount) * 100, 100)
+                : 0;
+
+            return {
+                goalId: goal._id,
+                targetType: goal.targetType,
+                importance: goal.importance,
+                frequency: goal.frequency,
+                targetCount: goal.targetCount,
+                completedCount,
+                percentAchieved: Number(percentAchieved.toFixed(2))
+            };
+        });
+
+
         // ספירה של משימות שהושלמו
         const completedTasks = allTasks.filter(t => t.finalStatus === 'הושלם');
         const completedCount = completedTasks.length;
@@ -94,42 +138,52 @@ export const getUserPerformance = async (req, res) => {
             return acc;
         }, {});
 
-// השוואה לימי עבודה קודמים
-// נניח שרוצים להשוות ל-7 ימים לפני תחילת הטווח הנוכחי
-const todayStart = dayjs().startOf('day').toDate();
-const todayEnd = dayjs().endOf('day').toDate();
+        // השוואה לימי עבודה קודמים
+        // נניח שרוצים להשוות ל-7 ימים לפני תחילת הטווח הנוכחי
+        const todayStart = dayjs().startOf('day').toDate();
+        const todayEnd = dayjs().endOf('day').toDate();
 
-const daysToCompare = 7;
-
-
-// נקבע את טווח ההשוואה - 7 ימים לפני תחילת הטווח הנוכחי ועד יום לפני תחילת הטווח
-const prevEnd = dayjs(todayStart).subtract(1, 'day').endOf('day').toDate();
-const prevStart = dayjs(prevEnd).subtract(daysToCompare - 1, 'day').startOf('day').toDate();
-
-// console.log("!!!prevStart", prevStart);
-// console.log("!!!prevEnd", prevEnd);
-
-const [prevNormalTasks, prevTodayTasks, prevRecurringTasks] = await Promise.all([
-  fetchTasksForUserRange(Task, userId, prevStart, prevEnd),
-  fetchTasksForUserRange(TodayTask, userId, prevStart, prevEnd),
-  fetchTasksForUserRange(RecurringTask, userId, prevStart, prevEnd),
-]);
-
-const prevAllTasks = [...prevNormalTasks, ...prevTodayTasks, ...prevRecurringTasks];
-const prevCompletedTasks = prevAllTasks.filter(t => t.finalStatus === 'הושלם');
-
-const totalPrevDays = dayjs(prevEnd).diff(dayjs(prevStart), 'day') + 1;
-const prevAverage = totalPrevDays > 0 ? (prevCompletedTasks.length / totalPrevDays) : 0;
+        const daysToCompare = 7;
 
 
+        // נקבע את טווח ההשוואה - 7 ימים לפני תחילת הטווח הנוכחי ועד יום לפני תחילת הטווח
+        const prevEnd = dayjs(todayStart).subtract(1, 'day').endOf('day').toDate();
+        const prevStart = dayjs(prevEnd).subtract(daysToCompare - 1, 'day').startOf('day').toDate();
 
+        // console.log("!!!prevStart", prevStart);
+        // console.log("!!!prevEnd", prevEnd);
+
+        const [prevNormalTasks, prevTodayTasks, prevRecurringTasks] = await Promise.all([
+            fetchTasksForUserRange(Task, userId, prevStart, prevEnd),
+            fetchTasksForUserRange(TodayTask, userId, prevStart, prevEnd),
+            fetchTasksForUserRange(RecurringTask, userId, prevStart, prevEnd),
+        ]);
+
+        const prevAllTasks = [...prevNormalTasks, ...prevTodayTasks, ...prevRecurringTasks];
+        const prevCompletedTasks = prevAllTasks.filter(t => t.finalStatus === 'הושלם');
+
+        const totalPrevDays = dayjs(prevEnd).diff(dayjs(prevStart), 'day') + 1;
+        const prevAverage = totalPrevDays > 0 ? (prevCompletedTasks.length / totalPrevDays) : 0;
+
+        // goalProgress הוא מערך עם כל היעדים, כל אחד עם completedCount ו targetCount
+
+        const totalTargetCount = goalProgress.reduce((sum, goal) => sum + goal.targetCount, 0);
+        const totalCompletedCount = goalProgress.reduce((sum, goal) => sum + goal.completedCount, 0);
+
+        const overallPercentAchieved = totalTargetCount > 0
+            ? Math.min((totalCompletedCount / totalTargetCount) * 100, 100)
+            : 0;
 
 
         res.json({
             completedCount,
             byImportance,
             prevAverage: Number(prevAverage.toFixed(2)),
-            progress: Object.values(progress)
+
+            progress: Object.values(progress),
+            goalProgress,
+            overallPercentAchieved: Number(overallPercentAchieved.toFixed(2)) 
+
         });
 
     } catch (err) {
