@@ -1,0 +1,139 @@
+import Task from '../models/Task.js';
+import TodayTask from '../models/TodayTask.js';
+import RecurringTask from '../models/RecurringTask.js';
+import TaskAssigneeDetails from '../models/TaskAssigneeDetails.js';
+import mongoose from 'mongoose';
+import dayjs from 'dayjs';
+
+const fetchTasksForUserRange = async (Model, userId, startDate, endDate) => {
+    const tasks = await Model.find({
+        assignees: userId,
+        updatedAt: { $gte: startDate, $lte: endDate },
+        isDeleted: { $ne: true }
+    }).lean();
+
+    const taskIds = tasks.map(t => t._id);
+    const personalStatuses = await TaskAssigneeDetails.find({
+        taskId: { $in: taskIds },
+        user: userId
+    }).lean();
+
+    return tasks.map(task => {
+        const personal = personalStatuses.find(p => String(p.taskId) === String(task._id));
+        return {
+            ...task,
+            finalStatus: personal?.status || task.status
+        };
+    });
+};
+
+
+export const getUserPerformance = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { rangeType, from, to, groupBy = 'day' } = req.query;
+        console.log("rangeType",rangeType)
+        console.log("from",from)
+        console.log("to",to)
+        console.log("groupBy",groupBy)
+
+
+        let startDate, endDate;
+
+        if (from && to) {
+            startDate = dayjs(from).startOf('day').toDate();
+            endDate = dayjs(to).endOf('day').toDate();
+        } else {
+            switch (rangeType) {
+                case 'week':
+                    startDate = dayjs().startOf('week').toDate();
+                    endDate = dayjs().endOf('week').toDate();
+                    break;
+                case 'month':
+                    startDate = dayjs().startOf('month').toDate();
+                    endDate = dayjs().endOf('month').toDate();
+                    break;
+                case 'year':
+                    startDate = dayjs().startOf('year').toDate();
+                    endDate = dayjs().endOf('year').toDate();
+                    break;
+                case 'day':
+                default:
+                    startDate = dayjs().startOf('day').toDate();
+                    endDate = dayjs().endOf('day').toDate();
+            }
+        }
+
+        // משיכת כל סוגי המשימות
+        const [normalTasks, todayTasks, recurringTasks] = await Promise.all([
+            fetchTasksForUserRange(Task, userId, startDate, endDate),
+            fetchTasksForUserRange(TodayTask, userId, startDate, endDate),
+            fetchTasksForUserRange(RecurringTask, userId, startDate, endDate),
+        ]);
+
+        const allTasks = [...normalTasks, ...todayTasks, ...recurringTasks];
+
+        // ספירה של משימות שהושלמו
+        const completedTasks = allTasks.filter(t => t.finalStatus === 'הושלם');
+        const completedCount = completedTasks.length;
+
+
+        // פילוח לפי חשיבות - רק משימות שהושלמו
+        const byImportance = completedTasks.reduce((acc, task) => {
+            acc[task.importance] = (acc[task.importance] || 0) + 1;
+            return acc;
+        }, {});
+
+        // גרף התקדמות יומי וחודשי לפי updatedAt
+        const groupFormat = groupBy === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD';
+
+        const progress = completedTasks.reduce((acc, task) => {
+            const day = dayjs(task.updatedAt).format(groupFormat);
+            if (!acc[day]) acc[day] = { date: day, completed: 0 };
+            acc[day].completed++;
+            return acc;
+        }, {});
+
+// השוואה לימי עבודה קודמים
+// נניח שרוצים להשוות ל-7 ימים לפני תחילת הטווח הנוכחי
+const todayStart = dayjs().startOf('day').toDate();
+const todayEnd = dayjs().endOf('day').toDate();
+
+const daysToCompare = 7;
+
+
+// נקבע את טווח ההשוואה - 7 ימים לפני תחילת הטווח הנוכחי ועד יום לפני תחילת הטווח
+const prevEnd = dayjs(todayStart).subtract(1, 'day').endOf('day').toDate();
+const prevStart = dayjs(prevEnd).subtract(daysToCompare - 1, 'day').startOf('day').toDate();
+
+// console.log("!!!prevStart", prevStart);
+// console.log("!!!prevEnd", prevEnd);
+
+const [prevNormalTasks, prevTodayTasks, prevRecurringTasks] = await Promise.all([
+  fetchTasksForUserRange(Task, userId, prevStart, prevEnd),
+  fetchTasksForUserRange(TodayTask, userId, prevStart, prevEnd),
+  fetchTasksForUserRange(RecurringTask, userId, prevStart, prevEnd),
+]);
+
+const prevAllTasks = [...prevNormalTasks, ...prevTodayTasks, ...prevRecurringTasks];
+const prevCompletedTasks = prevAllTasks.filter(t => t.finalStatus === 'הושלם');
+
+const totalPrevDays = dayjs(prevEnd).diff(dayjs(prevStart), 'day') + 1;
+const prevAverage = totalPrevDays > 0 ? (prevCompletedTasks.length / totalPrevDays) : 0;
+
+
+
+
+
+        res.json({
+            completedCount,
+            byImportance,
+            prevAverage: Number(prevAverage.toFixed(2)),
+            progress: Object.values(progress)
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
