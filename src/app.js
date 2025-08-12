@@ -9,6 +9,7 @@ import restoreTaskRoutes from './routes/restoreTaskRoutes.js'
 import taskFiltersRoutes from './routes/taskFiltersRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js'
 import alertRoutes from './routes/alertRoutes.js'
+import goalRoutes from './routes/goalRoutes.js'
 import cors from 'cors';
 import errorHandler from './middleware/errorMiddleware.js';
 
@@ -32,6 +33,8 @@ app.use('/api/restore', restoreTaskRoutes);
 app.use('/api/update',updateTaskRoutes);
 app.use('/api/alert',alertRoutes);
 app.use('/api/dashboard',dashboardRoutes)
+app.use('/api/goal',goalRoutes)
+
 
 
 
