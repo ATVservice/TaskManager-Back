@@ -36,6 +36,14 @@ const userSchema = new mongoose.Schema({
         enum: ['מנהל', 'עובד'],
         required: true
     },
+    resetToken: {
+        type: String,
+        default: null 
+    },
+    resetTokenExpiry: {
+        type: Date, 
+        default: null
+    },
     //עובד יכול להיות מקושר לכמה עמותות
     associations: [{
         type: mongoose.Schema.Types.ObjectId,
