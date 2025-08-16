@@ -36,14 +36,10 @@ const userSchema = new mongoose.Schema({
         enum: ['מנהל', 'עובד'],
         required: true
     },
-    resetToken: {
-        type: String,
-        default: null 
-    },
-    resetTokenExpiry: {
-        type: Date, 
-        default: null
-    },
+    // מס נסונות
+    loginAttempts: { type: Number, default: 0 },
+    lockUntil: { type: Date, default: null },
+    lastLogin: { type: Date,  default: Date.now},
     //עובד יכול להיות מקושר לכמה עמותות
     associations: [{
         type: mongoose.Schema.Types.ObjectId,

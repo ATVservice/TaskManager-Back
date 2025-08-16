@@ -7,6 +7,8 @@ import sendEmail from "../utils/sendEmail.js";
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET;
+const MAX_ATTEMPTS = 5; // ניסיונות מותרות
+const LOCK_TIME = 5 * 60 * 1000; // 5 דקות במילישניות
 
 // רישום משתמש
 export const register = async (req, res) => {
@@ -47,19 +49,39 @@ export const login = async (req, res) => {
     res.status(400);
     throw new Error('שם משתמש או סיסמה שגויים');
   }
+    // בדיקה אם המשתמש חסום כרגע
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      const remaining = Math.ceil((user.lockUntil - Date.now()) / 1000);
+      res.status(403);
+      throw new Error(`החשבון חסום. נסה שוב בעוד ${remaining} שניות.`)
+      return res.status(403).json({ message: `החשבון חסום. נסה שוב בעוד ${remaining} שניות.` });
+    }
 
   // השוואת סיסמאות
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) {
-    res.status(400);
-    throw new Error('שם משתמש או סיסמה שגויים');
+    user.loginAttempts += 1;
+
+    if (user.loginAttempts >= MAX_ATTEMPTS) {
+      user.lockUntil = new Date(Date.now() + LOCK_TIME);
+      user.loginAttempts = 0; // איפוס המונה לאחר חסימה
+    }
+
+    await user.save();
+    return res.status(401).json({ message: 'שם משתמש או סיסמה שגויים' });
   }
 
   const token = jwt.sign(
     { userId: user._id, role: user.role },
     JWT_SECRET,
-    { expiresIn: '15m' }
+    { expiresIn: '12h' }
+
   );
+  user.loginAttempts = 0;
+  user.lockUntil = null;
+  user.lastLogin = new Date();
+  
+  await user.save();
 
   return res.status(200).json({
     message: 'התחברת בהצלחה',

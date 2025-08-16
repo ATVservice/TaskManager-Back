@@ -5,22 +5,25 @@ import LogDelete from '../models/LogDelete.js';
 import validatePassword from '../utils/validatePassword.js';
 
 const getDeletedEntities = async (Model, userId, isAdmin) => {
-    if (isAdmin) {
-        return Model.find({
+    const query = isAdmin
+        ? {
             $or: [
                 { deletedBy: userId },
                 { isDeleted: true }
             ]
-        });
-    }
+        }
+        : {
+            $or: [
+                { deletedBy: userId },
+                { hiddenFrom: userId }
+            ]
+        };
 
-    return Model.find({
-        $or: [
-            { deletedBy: userId },
-            { hiddenFrom: userId }
-        ]
-    });
+    return Model.find(query)
+        .populate('organization', 'name')      
+        .populate('mainAssignee', 'userName');  
 };
+
 
 export const getAllDeletedTasks = async (req, res) => {
     const userId = req.user.id;
@@ -63,6 +66,7 @@ export const restoreTask = async (req, res) => {
 
     for (const { model, type } of models) {
         const entity = await model.findById(taskId)
+
         if (!entity) continue;
 
         const isSoftDeleted = entity.isDeleted;

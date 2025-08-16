@@ -43,25 +43,31 @@ export const getAssociatedEmployees = async (req, res) => {
 
 }
 // שיוך עובדים לעמותה
-export const addAssociationToUsers = async (req, res) => {
-  
+export const updateAssociationUsers = async (req, res) => {
     const { userIds, associationId } = req.body;
-
+  
     if (!Array.isArray(userIds) || !mongoose.Types.ObjectId.isValid(associationId)) {
-        res.status(400);
-        throw new Error('נתונים לא תקינים');
+      res.status(400);
+      throw new Error('נתונים לא תקינים');
     }
-
-    // עדכון מרובה - מוסיף את קוד העמותה רק אם הוא לא כבר קיים
-    const result = await User.updateMany(
-      { _id: { $in: userIds.map(id => new mongoose.Types.ObjectId(id)) } },
+  
+    // 1. הוספה – נוודא שכל המשתמשים שנבחרו אכן משויכים
+    await User.updateMany(
+      { _id: { $in: userIds } },
       { $addToSet: { associations: associationId } }
     );
-
+  
+    // 2. הסרה – כל מי שלא נמצא ברשימת userIds, נוריד לו את השיוך
+    await User.updateMany(
+      { _id: { $nin: userIds } },
+      { $pull: { associations: associationId } }
+    );
+  
     res.json({
-      message: `העמותה נוספה ל-${result.modifiedCount} עובדים`,
-      matchedCount: result.matchedCount
+      message: "שיוך עובדים עודכן בהצלחה",
+      updatedFor: userIds.length
     });
-};
+  };
+  
 
 

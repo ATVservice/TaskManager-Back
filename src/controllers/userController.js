@@ -35,5 +35,13 @@ export const updateUser = async (req, res) => {
       return res.status(500).json({ error: 'שגיאה בעת שליפת העובדים' });
     }
   };
+  export const getNamesEmployees = async (req, res) => {
+    try {
+      const employees = await User.find({ role: 'עובד' }).select('userName firstName lastName _id');
+      return res.status(200).json(employees);
+    } catch (error) {
+      return res.status(500).json({ error: 'שגיאה בעת שליפת העובדים' });
+    }
+  };
   
   
