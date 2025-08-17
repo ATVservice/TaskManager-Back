@@ -39,7 +39,15 @@ const userSchema = new mongoose.Schema({
     // מס נסונות
     loginAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date, default: null },
-    lastLogin: { type: Date,  default: Date.now},
+    lastLogin: { type: Date,  default: Date.now}, 
+    
+    // איפוס סיסמא
+    resetToken: {
+        type: String
+      },
+      resetTokenExpiry: {
+        type: Date
+      },
     //עובד יכול להיות מקושר לכמה עמותות
     associations: [{
         type: mongoose.Schema.Types.ObjectId,

@@ -106,6 +106,7 @@ export const generateAlerts = async () => {
     }
 };
 
+
 const createAlertIfNotExists = async (type, taskId, userId) => {
     const task = await Task.findOne({ _id: taskId, isDeleted: false });
     if (!task) return; // לא ליצור התראה על משימה שנמחקה
@@ -113,7 +114,7 @@ const createAlertIfNotExists = async (type, taskId, userId) => {
     if (!exists) {
         await Alert.create({
             type,
-            task: taskId,
+            task: taskId || null,
             recipient: userId,
             createdAt: new Date(),
             resolved: false,

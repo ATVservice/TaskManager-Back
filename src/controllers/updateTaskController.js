@@ -6,6 +6,13 @@ import User from '../models/User.js';
 import Association from '../models/Association.js';
 import { getTaskPermissionLevel } from '../utils/taskPermissions.js';
 
+async function checkAndMarkTaskCompleted(taskId) {
+  const details = await TaskAssigneeDetails.find({ taskId, taskModel: 'Task' });
+  if (details.length > 0 && details.every(d => d.status === 'הושלם')) {
+    await Task.findByIdAndUpdate(taskId, { status: 'הושלם' });
+  }
+}
+
 export const updateTask = async (req, res) => {
   try {
     const { taskId } = req.params;
@@ -124,11 +131,13 @@ export const updateTask = async (req, res) => {
       }
 
       const previous = await TaskAssigneeDetails.findOne({ taskId, user: user._id, taskModel: 'Task' });
-      const current = await TaskAssigneeDetails.findOneAndUpdate(
-        { taskId, user: user._id, taskModel: 'Task' },
-        personalUpdates,
-        { upsert: true, new: true }
-      );
+      // const current = await TaskAssigneeDetails.findOneAndUpdate(
+      //   { taskId, user: user._id, taskModel: 'Task' },
+      //   personalUpdates,
+      //   { upsert: true, new: true }
+      // );
+
+      await checkAndMarkTaskCompleted(taskId);
 
       const history = Object.entries(personalUpdates).map(([field, newVal]) => ({
         taskId,

@@ -4,8 +4,9 @@ const taskSchema = new mongoose.Schema({
   taskId: { type: Number, required: true, unique: true }, // מזהה עוקב פנימי
   creator: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // מקים המשימה
   createdAt: { type: Date, default: Date.now}, // תאריך יצירה
-  dueDate: { type: Date ,required: true}, // תאריך משימה
-  finalDeadline: { type: Date ,required: true}, // תאריך יעד סופי
+  dueDate: { type: Date}, // תאריך משימה
+  finalDeadline: { type: Date}, // תאריך יעד סופי
+
   updatedAt: { type: Date, default: Date.now }, // תאריך עדכון
   title: { type: String, required: true }, // כותרת
   details: { type: String }, // פרטים
@@ -26,6 +27,7 @@ const taskSchema = new mongoose.Schema({
   },
   statusNote: { type: String , default:""},
   failureReason: { type: String },
+  cancelReason: { type: String },
   followUp: { type: String },
   daysOpen: { type: Number, default: 0 },
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Association' ,required: true},

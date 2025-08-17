@@ -9,7 +9,6 @@ import TaskAssigneeDetails from '../models/TaskAssigneeDetails.js';
 
 
 export const createTask = async (req, res) => {
-  try {
     const {
       title,
       details,
@@ -27,16 +26,26 @@ export const createTask = async (req, res) => {
     } = req.body.form;
     console.log("req.body.form", req.body.form);
 
+    if (importance !== 'מגירה') {
+      if (!dueDate || !finalDeadline) {
+        res.status(400);
+        throw new Error('חובה להגדיר תאריכים למשימות שאינן מגירה');
+      }
+    }
+    
+
     const creatorId = req.user._id;
 
     if (!Array.isArray(assignees) || assignees.length === 0) {
-      return res.status(400).json({ error: 'שדה assignees חסר או לא תקין' });
+      res.status(400);
+      throw new Error('שדה assignees חסר או לא תקין')
     }
 
     // שליפת המשתמשים לפי userName
     const users = await User.find({ _id: { $in: assignees } });
     if (users.length !== assignees.length) {
-      return res.status(400).json({ error: 'יש אחראים שלא קיימים במערכת' });
+      res.status(400);
+      throw new Error('יש אחראים שלא קיימים במערכת')
     }
 
     // מיפוי ל־_id
@@ -45,7 +54,8 @@ export const createTask = async (req, res) => {
     // שליפת האחראי הראשי לפי userName
     const mainAssigneeUser = users.find(user => user._id.toString() === mainAssignee);
     if (!mainAssigneeUser) {
-      return res.status(400).json({ error: 'האחראי הראשי חייב להיות מתוך רשימת האחראים' });
+      res.status(400);
+      throw new Error('האחראי הראשי חייב להיות מתוך רשימת האחראים')
     }
     if (importance !== 'מיידי') {
 
@@ -95,10 +105,7 @@ export const createTask = async (req, res) => {
 
     return res.status(201).json({ message: 'משימה נוצרה בהצלחה' });
 
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'שגיאה ביצירת משימה' });
-  }
+
 };
 
 

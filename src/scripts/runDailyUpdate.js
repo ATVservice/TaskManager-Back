@@ -3,7 +3,7 @@ import { refreshTodayTasks } from '../controllers/todayTasksController.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
-
+// להריץ פעם ביום
 mongoose.connect(process.env.MONGO_URI).then(async () => {
   console.log('Running daily task sync...');
   await refreshTodayTasks();
