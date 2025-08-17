@@ -85,4 +85,34 @@ export const getTodayTasks = async (req, res) => {
     res.status(200).json(tasks);
 };
 
+// חישוב שדה daysOpen
+export const updateDaysOpen = async() => {
+    try {
+      const today = dayjs().startOf('day');
+  
+      // בוחר רק משימות שלא הושלמו ולא בוטלו
+      const tasks = await Task.find();
+  
+      const bulkOps = tasks.map(task => {
+        const created = dayjs(task.createdAt);
+        const daysOpen = today.diff(created, 'day'); // חישוב מספר הימים
+        return {
+          updateOne: {
+            filter: { _id: task._id },
+            update: { $set: { daysOpen } },
+          },
+        };
+      });
+  
+      if (bulkOps.length > 0) {
+        await Task.bulkWrite(bulkOps);
+        console.log(`✅ עדכון daysOpen ל-${bulkOps.length} משימות`);
+      } else {
+        console.log('אין משימות לעדכן');
+      }
+    } catch (err) {
+      console.error('שגיאה בעדכון daysOpen:', err);
+    }
+  }
+
 
