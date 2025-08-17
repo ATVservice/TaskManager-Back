@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 
 export const generateAlerts = async () => {
     const now = new Date();
-    const fourteenDaysAgo = new Date(now.getTime() -14 * 24 * 60 * 60 * 1000);
+    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     // 1. התראות למשתמשים
@@ -19,14 +19,14 @@ export const generateAlerts = async () => {
     for (const task of staleDrawerTasks) {
         const creatorId = task.creator;
         await createAlertIfNotExists('משימת מגירה שהקמת לא עודכנה 14 ימים', task._id, creatorId);
-            // שליחת התראה לאחראי ראשי (mainAssignee)
-    if (task.mainAssignee) {
-        await createAlertIfNotExists(
-            'משימת מגירה שבאחריותך לא עודכנה 14 ימים',
-            task._id,
-            task.mainAssignee
-        );
-    }
+        // שליחת התראה לאחראי ראשי (mainAssignee)
+        if (task.mainAssignee) {
+            await createAlertIfNotExists(
+                'משימת מגירה שבאחריותך לא עודכנה 14 ימים',
+                task._id,
+                task.mainAssignee
+            );
+        }
     }
 
     const overdueTasks = await Task.find({
@@ -106,21 +106,115 @@ export const generateAlerts = async () => {
     }
 };
 
-
-const createAlertIfNotExists = async (type, taskId, userId) => {
-    const task = await Task.findOne({ _id: taskId, isDeleted: false });
-    if (!task) return; // לא ליצור התראה על משימה שנמחקה
-    const exists = await Alert.exists({ type, task: taskId, recipient: userId });
-    if (!exists) {
-        await Alert.create({
-            type,
-            task: taskId || null,
-            recipient: userId,
-            createdAt: new Date(),
-            resolved: false,
+export const generateWeeklyDrawerSummary = async () => {
+    try {
+      // 1. לכל עובד – כמה משימות מגירה פתוחות יש לו
+      const employees = await User.find({ role: 'עובד' });
+  
+      for (const emp of employees) {
+        const count = await Task.countDocuments({
+          importance: 'מגירה',
+          isDeleted: false,
+          status: { $nin: ['הושלם', 'בוטלה'] },
+          $and: [
+            {
+              $or: [
+                { creator: emp._id },
+                { mainAssignee: emp._id },
+                { assignees: emp._id }
+              ]
+            },
+            {
+              $or: [
+                { dueDate: null },
+                { dueDate: { $exists: false } }
+              ]
+            },
+            {
+              $or: [
+                { finalDeadline: null },
+                { finalDeadline: { $exists: false } }
+              ]
+            }
+          ]
         });
+  
+        if (count > 0) {
+          await createAlertIfNotExists(
+            'התרעת מגירה שבועית',
+            null, // אין משימה ספציפית
+            emp._id,
+            `יש לך ${count} משימות מגירה פתוחות – בחר אחת ובצע אותה היום.`
+          );
+        }
+      }
+  
+      // 2. למנהלים – כמה משימות מגירה פתוחות כלליות במערכת
+      const totalDrawer = await Task.countDocuments({
+        importance: 'מגירה',
+        isDeleted: false,
+        status: { $nin: ['הושלם', 'בוטלה'] },
+        $and: [
+          {
+            $or: [
+              { dueDate: null },
+              { dueDate: { $exists: false } }
+            ]
+          },
+          {
+            $or: [
+              { finalDeadline: null },
+              { finalDeadline: { $exists: false } }
+            ]
+          }
+        ]
+      });
+  
+      if (totalDrawer > 0) {
+        const admins = await User.find({ role: 'מנהל' });
+        for (const admin of admins) {
+          await createAlertIfNotExists(
+            'התרעת מגירה שבועית',
+            null,
+            admin._id,
+            `יש במערכת ${totalDrawer} משימות מגירה פתוחות – מומלץ לשייך להן תאריכים.`
+          );
+        }
+      }
+  
+      console.log('✅ Weekly drawer summary alerts created');
+    } catch (err) {
+      console.error('❌ Error generating weekly drawer summary:', err);
     }
-};
+  };
+
+
+const createAlertIfNotExists = async (type, taskId, userId, details) => {
+    let task = null;
+  
+    // בדיקה על משימה רק אם קיים taskId
+    if (taskId) {
+      task = await Task.findOne({ _id: taskId, isDeleted: false });
+      if (!task) return; // לא ליצור התראה על משימה שנמחקה
+    }
+  
+    const exists = await Alert.exists({
+      type,
+      task: taskId || null,
+      recipient: userId
+    });
+  
+    if (!exists) {
+      await Alert.create({
+        type,
+        task: taskId || null,
+        recipient: userId,
+        details: details || null,
+        createdAt: new Date(),
+        resolved: false,
+      });
+    }
+  };
 
 
 // שליפת התרעות למשתמש

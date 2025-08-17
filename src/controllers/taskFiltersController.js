@@ -50,7 +50,7 @@ export const getCompletedTasks = async (req, res) => {
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
-        .populate('creator', 'userName');
+        // .populate('creator', 'userName');
 
 
     const recurringToday = await TodayTask.find(baseRecurringFilter)
@@ -58,7 +58,7 @@ export const getCompletedTasks = async (req, res) => {
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
-        .populate('creator', 'userName');
+        // .populate('creator', 'userName');
 
 
     const all = [...singleTasks, ...recurringToday];
@@ -88,7 +88,7 @@ export const getCancelledTasks = async (req, res) => {
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
-        .populate('creator', 'userName');
+        // .populate('creator', 'userName');
 
 
     const recurringToday = await TodayTask.find(baseRecurringFilter)
@@ -96,7 +96,7 @@ export const getCancelledTasks = async (req, res) => {
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
-        .populate('creator', 'userName');
+        // .populate('creator', 'userName');
 
 
     const all = [...singleTasks, ...recurringToday];
@@ -127,7 +127,7 @@ export const getDrawerTasks = async (req, res) => {
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
-        .populate('creator', 'userName');
+        // .populate('creator', 'userName');
 
 
     const recurringToday = await TodayTask.find(baseRecurringFilter)
@@ -135,7 +135,7 @@ export const getDrawerTasks = async (req, res) => {
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
-        .populate('creator', 'userName');
+        // .populate('creator', 'userName');
 
 
     const all = [...singleTasks, ...recurringToday];
@@ -155,7 +155,7 @@ export const getRecurringTasks = async (req, res) => {
         .populate('assignees', 'userName')
         .populate('mainAssignee', 'userName')
         .populate('organization', 'name')
-        .populate('creator', 'userName');
+        // .populate('creator', 'userName');
 
 
     res.status(200).json(tasks);

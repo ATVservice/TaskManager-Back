@@ -5,6 +5,11 @@ import TaskAssigneeDetails from '../models/TaskAssigneeDetails.js';
 import User from '../models/User.js';
 import Association from '../models/Association.js';
 import { getTaskPermissionLevel } from '../utils/taskPermissions.js';
+import TodayTask from '../models/TodayTask.js';
+import dayjs from 'dayjs';
+import isBetween from 'dayjs/plugin/isBetween.js';
+
+dayjs.extend(isBetween);
 
 async function checkAndMarkTaskCompleted(taskId) {
   const details = await TaskAssigneeDetails.find({ taskId, taskModel: 'Task' });
@@ -262,6 +267,30 @@ export const updateTask = async (req, res) => {
 
     // save and populate
     await task.save();
+
+// אם עודכן תאריך היעד להיום אז זה יתווסיף למשימות להיום
+//וכן להיפך, אם נדחה התאריך הוא יוסר ממשימות להיום 
+if (task.dueDate) {
+  const today = dayjs().startOf('day');
+  const endOfToday = dayjs().endOf('day');
+
+  if (dayjs(task.dueDate).isBetween(today, endOfToday, null, '[]')) {
+    const exists = await TodayTask.findOne({ sourceTaskId: task._id, isRecurringInstance: false });
+    if (!exists) {
+      await TodayTask.create({
+        ...task.toObject(),
+        sourceTaskId: task._id,
+        isRecurringInstance: false
+      });
+      console.log(`✅ Task ${task._id} added to TodayTask`);
+    }
+  } else {
+    // אם התאריך כבר לא היום – למחוק מהטבלה (כדי לא להציג בטעות)
+    await TodayTask.deleteOne({ sourceTaskId: task._id, isRecurringInstance: false });
+  }
+}
+
+
 
     // populate fields for response clarity
     await task.populate('organization');
