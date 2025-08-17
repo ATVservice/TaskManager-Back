@@ -8,7 +8,39 @@ import validatePassword from "../utils/validatePassword.js";
 
 
 const handleSoftDelete = async ({ entity, entityType, userId, isAdmin, isCreator, isAssignee, res }) => {
-    if (isAdmin || isCreator) {
+    if (isAdmin) {
+        entity.isDeleted = true;
+        entity.deletedAt = new Date();
+        entity.deletedBy = userId;
+
+        await LogDelete.create({
+            taskId: entity.taskId,
+            taskRef: entity._id,
+            action: 'מחיקה',
+            user: userId,
+        });
+
+        entity.updatesHistory.push({
+            date: new Date(),
+            user: userId,
+            status: entity.status,
+            note: `מחיקה רכה (${entityType})`
+        });
+
+        await entity.save();
+        return res.json({ message: `המשימה נמחקה (${entityType})` });
+    }
+
+    // יוצר המשימה
+    if (isCreator) {
+        const hasOtherUpdates =
+            entity.updatesHistory &&
+            entity.updatesHistory.some(u => u.user.toString() !== userId.toString());
+        if (['בטיפול', 'הושלם'].includes(entity.status) && hasOtherUpdates) {
+            res.status(403);
+            throw new Error('לא ניתן למחוק משימה שנמצאת בטיפול או הושלמה, אלא בהרשאת מנהל');
+        }
+
         entity.isDeleted = true;
         entity.deletedAt = new Date();
         entity.deletedBy = userId;

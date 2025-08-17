@@ -136,11 +136,11 @@ export const updateTask = async (req, res) => {
       }
 
       const previous = await TaskAssigneeDetails.findOne({ taskId, user: user._id, taskModel: 'Task' });
-      // const current = await TaskAssigneeDetails.findOneAndUpdate(
-      //   { taskId, user: user._id, taskModel: 'Task' },
-      //   personalUpdates,
-      //   { upsert: true, new: true }
-      // );
+      const current = await TaskAssigneeDetails.findOneAndUpdate(
+        { taskId, user: user._id, taskModel: 'Task' },
+        personalUpdates,
+        { upsert: true, new: true }
+      );
 
       await checkAndMarkTaskCompleted(taskId);
 
