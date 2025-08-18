@@ -10,6 +10,7 @@ import taskFiltersRoutes from './routes/taskFiltersRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js'
 import alertRoutes from './routes/alertRoutes.js'
 import goalRoutes from './routes/goalRoutes.js'
+import reportRoutes from './routes/reportRoutes.js'
 import cors from 'cors';
 import errorHandler from './middleware/errorMiddleware.js';
 
@@ -34,6 +35,7 @@ app.use('/api/update',updateTaskRoutes);
 app.use('/api/alert',alertRoutes);
 app.use('/api/dashboard',dashboardRoutes)
 app.use('/api/goal',goalRoutes)
+app.use('/api/report',reportRoutes)
 
 
 
