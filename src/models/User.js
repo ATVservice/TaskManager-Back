@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema({
         required: true,
         trim: true,
         unique: true,
-        match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email']
+        match: [/^\S+@\S+\.\S+$/, 'אנא הזן כתובת דוא"ל תקינה']
     },
     password: {
         type: String,
