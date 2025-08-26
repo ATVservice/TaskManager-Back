@@ -6,9 +6,9 @@ import mongoose from 'mongoose';
 import dayjs from 'dayjs';
 import Goal from '../models/Goal.js';
 
-const fetchTasksForUserRange = async (Model, userId, startDate, endDate) => {
+const fetchTasksForUserRange = async (Model, targetId, startDate, endDate) => {
     const tasks = await Model.find({
-        assignees: userId,
+        assignees: targetId,
         updatedAt: { $gte: startDate, $lte: endDate },
         isDeleted: { $ne: true }
     }).lean();
@@ -16,7 +16,7 @@ const fetchTasksForUserRange = async (Model, userId, startDate, endDate) => {
     const taskIds = tasks.map(t => t._id);
     const personalStatuses = await TaskAssigneeDetails.find({
         taskId: { $in: taskIds },
-        user: userId
+        user: targetId
     }).lean();
 
     return tasks.map(task => {
@@ -31,8 +31,10 @@ const fetchTasksForUserRange = async (Model, userId, startDate, endDate) => {
 
 export const getUserPerformance = async (req, res) => {
     try {
-        const userId = req.user._id;
-        const { rangeType, from, to, groupBy = 'day' } = req.query;
+        const {employeeId, rangeType, from, to, groupBy = 'day' } = req.query;
+        const targetId = employeeId || req.user.id;
+        console.log("Target ID for performance fetch:", targetId);
+
         console.log("rangeType", rangeType)
         console.log("from", from)
         console.log("to", to)
@@ -41,7 +43,7 @@ export const getUserPerformance = async (req, res) => {
         const goals = await Goal.find({
             $or: [
                 { targetType: 'כלל העובדים' },
-                { targetType: 'עובד בודד', employee: userId }
+                { targetType: 'עובד בודד', employee: targetId }
             ]
         });
 
@@ -74,9 +76,9 @@ export const getUserPerformance = async (req, res) => {
 
         // משיכת כל סוגי המשימות
         const [normalTasks, todayTasks, recurringTasks] = await Promise.all([
-            fetchTasksForUserRange(Task, userId, startDate, endDate),
-            fetchTasksForUserRange(TodayTask, userId, startDate, endDate),
-            fetchTasksForUserRange(RecurringTask, userId, startDate, endDate),
+            fetchTasksForUserRange(Task, targetId, startDate, endDate),
+            fetchTasksForUserRange(TodayTask, targetId, startDate, endDate),
+            fetchTasksForUserRange(RecurringTask, targetId, startDate, endDate),
         ]);
 
         const allTasks = [...normalTasks, ...todayTasks, ...recurringTasks];
@@ -88,7 +90,7 @@ export const getUserPerformance = async (req, res) => {
                 // בדוק תכונות המשימה מול היעד, לדוגמה חשיבות ותדירות
                 if (task.importance !== goal.importance) return false;
                 if (task.finalStatus !== 'הושלם') return false;  // הוספת סינון לסטטוס הושלם
-                if (goal.targetType === 'עובד בודד' && String(goal.employee) !== String(userId)) {
+                if (goal.targetType === 'עובד בודד' && String(goal.employee) !== String(targetId)) {
                     return false; // לא של העובד הנוכחי
                 }
                 // תוכל להוסיף גם בדיקת תדירות אם יש לך שדה כזה במשימות
@@ -154,9 +156,9 @@ export const getUserPerformance = async (req, res) => {
         // console.log("!!!prevEnd", prevEnd);
 
         const [prevNormalTasks, prevTodayTasks, prevRecurringTasks] = await Promise.all([
-            fetchTasksForUserRange(Task, userId, prevStart, prevEnd),
-            fetchTasksForUserRange(TodayTask, userId, prevStart, prevEnd),
-            fetchTasksForUserRange(RecurringTask, userId, prevStart, prevEnd),
+            fetchTasksForUserRange(Task, targetId, prevStart, prevEnd),
+            fetchTasksForUserRange(TodayTask, targetId, prevStart, prevEnd),
+            fetchTasksForUserRange(RecurringTask, targetId, prevStart, prevEnd),
         ]);
 
         const prevAllTasks = [...prevNormalTasks, ...prevTodayTasks, ...prevRecurringTasks];

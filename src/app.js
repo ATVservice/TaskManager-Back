@@ -8,6 +8,7 @@ import updateTaskRoutes from './routes/updateTaskRoutes.js'
 import restoreTaskRoutes from './routes/restoreTaskRoutes.js'
 import taskFiltersRoutes from './routes/taskFiltersRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js'
+import adminDashboardRoutes from './routes/adminDashboardRoutes.js'
 import alertRoutes from './routes/alertRoutes.js'
 import goalRoutes from './routes/goalRoutes.js'
 import reportRoutes from './routes/reportRoutes.js'
@@ -36,6 +37,7 @@ app.use('/api/alert',alertRoutes);
 app.use('/api/dashboard',dashboardRoutes)
 app.use('/api/goal',goalRoutes)
 app.use('/api/report',reportRoutes)
+app.use('/api/adminDashboard',adminDashboardRoutes)
 
 
 
