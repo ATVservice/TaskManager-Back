@@ -5,36 +5,151 @@ import User from '../models/User.js';
 import Association from '../models/Association.js';
 import TaskAssigneeDetails from '../models/TaskAssigneeDetails.js';
 import Goal from '../models/Goal.js';
+import UserFilter from '../models/UserFilter.js'; 
 
-// אחסון פילטרים לפי משתמש
-const userFilters = new Map();
+// פונקציות עזר חדשות למסד נתונים
+export const saveUserFilter = async (userId, screenType, filters) => {
+  try {
+    const cleanFilters = cleanEmptyFilters(filters);
+    
+    const result = await UserFilter.findOneAndUpdate(
+      { userId, screenType },
+      { 
+        filters: cleanFilters,
+        lastUsed: new Date()
+      },
+      { 
+        upsert: true, 
+        new: true,
+        runValidators: true
+      }
+    );
 
-// פונקציית עזר לשמירת פילטר
-const saveUserFilter = (userId, screenType, filters) => {
-  const userKey = `${userId}_${screenType}`;
-  userFilters.set(userKey, filters);
-};
-
-// פונקציית עזר לטעינת פילטר
-const loadUserFilter = (userId, screenType) => {
-  const userKey = `${userId}_${screenType}`;
-  return userFilters.get(userKey) || {};
-};
-
-// פונקציית עזר לבניית פילטר בסיסי לפי הרשאות
-const buildBaseFilter = (userId, userRole) => {
-  let baseFilter = { isDeleted: { $ne: true } };
-
-  // אם זה לא מנהל, הוסף פילטר לראות רק משימות שהוא קשור אליהן
-  if (userRole !== 'מנהל') {
-    baseFilter.$or = [
-      { creator: userId },
-      { mainAssignee: userId },
-      { assignees: { $in: [userId] } }
-    ];
+    console.log(`Filter saved for user ${userId}, screen: ${screenType}`, cleanFilters);
+    return result;
+  } catch (error) {
+    console.error('Error saving user filter:', error);
+    throw error;
   }
+};
 
-  return baseFilter;
+export const loadUserFilter = async (userId, screenType) => {
+  try {
+    const userFilter = await UserFilter.findOne({ userId, screenType });
+    
+    if (!userFilter) {
+      return {};
+    }
+
+    await UserFilter.findByIdAndUpdate(userFilter._id, { 
+      lastUsed: new Date() 
+    });
+
+    return userFilter.filters || {};
+  } catch (error) {
+    console.error('Error loading user filter:', error);
+    return {};
+  }
+};
+
+export const resetUserFilter = async (userId, screenType) => {
+  try {
+    await UserFilter.findOneAndDelete({ userId, screenType });
+    console.log(`Filter reset for user ${userId}, screen: ${screenType}`);
+    return true;
+  } catch (error) {
+    console.error('Error resetting user filter:', error);
+    throw error;
+  }
+};
+
+const cleanEmptyFilters = (filters) => {
+  const cleaned = {};
+  
+  Object.keys(filters).forEach(key => {
+    const value = filters[key];
+    
+    if (value !== null && value !== undefined && value !== '' && value !== 'all') {
+      if (Array.isArray(value)) {
+        if (value.length > 0) {
+          cleaned[key] = value;
+        }
+      } else {
+        cleaned[key] = value;
+      }
+    }
+  });
+  
+  return cleaned;
+};
+
+export const loadSavedFilter = async (req, res) => {
+  try {
+    const { screenType } = req.params;
+    const userId = req.user.id;
+
+    const savedFilter = await loadUserFilter(userId, screenType);
+
+    res.json({
+      success: true,
+      filter: savedFilter
+    });
+
+  } catch (error) {
+    console.error('Error in loadSavedFilter:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'שגיאה בטעינת פילטר שמור' 
+    });
+  }
+};
+
+/**
+ * איפוס פילטר למשתמש
+ * DELETE /api/filters/:screenType
+ */
+export const resetFilter = async (req, res) => {
+  try {
+    const { screenType } = req.params;
+    const userId = req.user.id;
+
+    await resetUserFilter(userId, screenType);
+
+    res.json({
+      success: true,
+      message: 'הפילטר אופס בהצלחה'
+    });
+
+  } catch (error) {
+    console.error('Error in resetFilter:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'שגיאה באיפוס פילטר' 
+    });
+  }
+};
+
+/**
+ * קבלת כל הפילטרים של המשתמש
+ * GET /api/filters/user/all
+ */
+export const getAllUserFilters = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const filters = await getUserAllFilters(userId);
+
+    res.json({
+      success: true,
+      filters
+    });
+
+  } catch (error) {
+    console.error('Error in getAllUserFilters:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'שגיאה בקבלת פילטרים' 
+    });
+  }
 };
 
 // פונקציית עזר לקבלת פרטי assignee
@@ -44,413 +159,415 @@ const getAssigneeDetails = async (taskId, taskModel, userId = null) => {
 
   return await TaskAssigneeDetails.find(query).populate('user', 'firstName lastName userName');
 };
-//!!!!!!!!!!!!!!!!!!!!!!!לבטל
-// פונקציית עזר לחישוב ימים פתוחים
-const calculateDaysOpen = (createdAt) => {
-  const now = new Date();
-  const created = new Date(createdAt);
-  return Math.floor((now - created) / (1000 * 60 * 60 * 24));
-};
+//פונקציה אחידה לבניית פילטר
+function buildTaskFilter(query) {
+  const {
+    employeeId,
+    startDate,
+    endDate,
+    importance,
+    subImportance,
+    associationId,
+    status,
+    reasonId
+  } = query;
 
-// 1. דוח משימות פתוחות לפי עובדים
+  console.log("*employeeId", employeeId)
+  console.log("**startDate", startDate)
+  console.log("***endDate", endDate)
+  console.log("****importance", importance)
+  console.log("*****subImportance", subImportance)
+  console.log("******organization", associationId)
+  console.log("*******status", status)
+  console.log("********failureReason", reasonId)
 
-export const getOpenTasksByEmployee = async (req, res) => {
-  try {
-    const {
-      employeeId,
-      startDate,
-      endDate,
-      importance,
-      subImportance,
-      organization,
-      project,
-      status = ['בתהליך', 'מושהה', 'בטיפול']
-    } = req.query;
 
-    const userId = req.user.id;
-    const userRole = req.user.role;
 
-    // שמירת פילטר
-    saveUserFilter(userId, 'openTasks', req.query);
 
-    let baseFilter = buildBaseFilter(userId, userRole);
 
-    // הוספת פילטרים ספציפיים
-    if (employeeId) {
-      baseFilter.$or = [
-        { creator: employeeId },
-        { mainAssignee: employeeId },
-        { assignees: { $in: [employeeId] } }
-      ];
-    }
 
-    if (startDate && endDate) {
-      baseFilter.createdAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
-    }
+  let filter = { isDeleted: { $ne: true } };
 
-    if (importance) baseFilter.importance = importance;
-    if (subImportance) baseFilter.subImportance = subImportance;
-    if (organization) baseFilter.organization = organization;
-    if (project) baseFilter.project = new RegExp(project, 'i');
-    if (status && status.length > 0) {
-      baseFilter.status = Array.isArray(status) ? { $in: status } : status;
-    }
-
-    // חיפוש במשימות רגילות
-    const regularTasks = await Task.find(baseFilter)
-      .populate('creator', 'firstName lastName userName')
-      .populate('mainAssignee', 'firstName lastName userName')
-      .populate('assignees', 'firstName lastName userName')
-      .populate('organization', 'name')
-      .sort({ createdAt: -1 });
-
-    // חיפוש במשימות קבועות
-    const recurringTasks = await RecurringTask.find({
-      ...baseFilter,
-      status: { $in: status }
-    })
-      .populate('creator', 'firstName lastName userName')
-      .populate('mainAssignee', 'firstName lastName userName')
-      .populate('assignees', 'firstName lastName userName')
-      .populate('organization', 'name')
-      .sort({ createdAt: -1 });
-
-    // שילוב והעשרת הנתונים
-    const allTasks = [];
-
-    for (const task of regularTasks) {
-      const assigneeDetails = await getAssigneeDetails(task._id, 'Task');
-      allTasks.push({
-        ...task.toObject(),
-        daysOpen: calculateDaysOpen(task.createdAt),
-        taskType: 'רגילה',
-        assigneeDetails
-      });
-    }
-
-    for (const task of recurringTasks) {
-      const assigneeDetails = await getAssigneeDetails(task._id, 'RecurringTask');
-      allTasks.push({
-        ...task.toObject(),
-        daysOpen: calculateDaysOpen(task.createdAt),
-        taskType: 'קבועה',
-        assigneeDetails
-      });
-    }
-
-    // קיבוץ לפי עובדים
-    const tasksByEmployee = {};
-
-    allTasks.forEach(task => {
-      const employees = [
-        { id: task.creator._id, name: `${task.creator.firstName} ${task.creator.lastName}`, userName: task.creator.userName, role: 'יוצר' },
-        { id: task.mainAssignee._id, name: `${task.mainAssignee.firstName} ${task.mainAssignee.lastName}`, userName: task.mainAssignee.userName, role: 'אחראי ראשי' }
-      ];
-
-      task.assignees.forEach(assignee => {
-        if (assignee._id.toString() !== task.mainAssignee._id.toString()) {
-          employees.push({
-            id: assignee._id,
-            name: `${assignee.firstName} ${assignee.lastName}`,
-            userName: assignee.userName,
-            role: 'אחראי משני'
-          });
-        }
-      });
-
-      employees.forEach(emp => {
-        if (!tasksByEmployee[emp.id]) {
-          tasksByEmployee[emp.id] = {
-            employee: emp,
-            tasks: [],
-            summary: {
-              total: 0,
-              byImportance: {},
-              byStatus: {},
-              overdue: 0,
-              avgDaysOpen: 0,
-              oldestOpenDays: 0
-            }
-          };
-        }
-
-        tasksByEmployee[emp.id].tasks.push({ ...task, employeeRole: emp.role });
-        tasksByEmployee[emp.id].summary.total++;
-        tasksByEmployee[emp.id].summary.byImportance[task.importance] =
-          (tasksByEmployee[emp.id].summary.byImportance[task.importance] || 0) + 1;
-        tasksByEmployee[emp.id].summary.byStatus[task.status] =
-          (tasksByEmployee[emp.id].summary.byStatus[task.status] || 0) + 1;
-
-        // בדיקה אם המשימה באיחור
-        if (task.finalDeadline && new Date(task.finalDeadline) < new Date()) {
-          tasksByEmployee[emp.id].summary.overdue++;
-        }
-      });
-    });
-
-    // חישוב ממוצע וותק משימות לכל עובד
-    Object.values(tasksByEmployee).forEach(empData => {
-      const daysArr = empData.tasks.map(t => t.daysOpen);
-      if (daysArr.length > 0) {
-        const sum = daysArr.reduce((a, b) => a + b, 0);
-        empData.summary.avgDaysOpen = Math.round(sum / daysArr.length);
-        empData.summary.oldestOpenDays = Math.max(...daysArr);
-      }
-    });
-
-    res.json({
-      success: true,
-      data: Object.values(tasksByEmployee),
-      totalTasks: allTasks.length,
-      appliedFilters: req.query
-    });
-
-  } catch (error) {
-    console.error('Error in getOpenTasksByEmployee:', error);
-    res.status(500).json({ success: false, message: 'שגיאה בשליפת דוח משימות פתוחות' });
+  // עובד
+  if (employeeId) {
+    filter.$or = [
+      { creator: employeeId },
+      { mainAssignee: employeeId },
+      { assignees: { $in: [employeeId] } }
+    ];
   }
-};
 
-// 2. דוח משימות לפי אחראים ראשיים ומשניים
-export const getTasksByResponsibility = async (req, res) => {
-  try {
-    const {
-      responsibilityType = 'all', // 'main', 'secondary', 'all'
-      employeeId,
-      startDate,
-      endDate,
-      importance,
-      organization,
-      status
-    } = req.query;
+  // טווח תאריכים
+  if (startDate && endDate) {
+    filter.createdAt = { $gte: new Date(startDate), $lte: new Date(endDate) };
+  }
 
-    const userId = req.user.id;
-    const userRole = req.user.role;
+  // חשיבות ותת־חשיבות
+  if (importance) filter.importance = importance;
+  if (subImportance) filter.subImportance = subImportance;
 
-    saveUserFilter(userId, 'tasksByResponsibility', req.query);
+  // עמותה
+  if (associationId) filter.organization = associationId;
 
-    let baseFilter = buildBaseFilter(userId, userRole);
+  // סטטוס
+  if (status) {
+    filter.status = Array.isArray(status) ? { $in: status } : status;
+  }
 
-    // הוספת פילטרים
-    if (startDate && endDate) {
-      baseFilter.createdAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
-    }
+  // סיבת אי ביצוע
+  if (reasonId) {
+    filter.failureReason = reasonId;
+  }
 
-    if (importance) baseFilter.importance = importance;
-    if (organization) baseFilter.organization = organization;
-    if (status) baseFilter.status = Array.isArray(status) ? { $in: status } : status;
+  return filter;
+}
+// 1. דוח משימות פתוחות לפי עובדים
+export const getOpenTasksByEmployee = async (req, res) => {
+  const { status = ['בתהליך', 'מושהה', 'בטיפול'] } = req.query;
+  const userId = req.user.id;
 
-    // בניית pipeline לאגרגציה
-    const pipeline = [
-      { $match: baseFilter },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'mainAssignee',
-          foreignField: '_id',
-          as: 'mainAssigneeData'
-        }
-      },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'assignees',
-          foreignField: '_id',
-          as: 'assigneesData'
-        }
-      },
-      {
-        $lookup: {
-          from: 'associations',
-          localField: 'organization',
-          foreignField: '_id',
-          as: 'organizationData'
-        }
-      }
+  // שמירת פילטר
+  saveUserFilter(userId, 'openTasks', req.query);
+
+  let baseFilter = buildTaskFilter({
+    ...req.query,
+    status
+  });
+
+  // חיפוש במשימות רגילות
+  const regularTasks = await Task.find(baseFilter)
+    .populate('creator', 'firstName lastName userName')
+    .populate('mainAssignee', 'firstName lastName userName')
+    .populate('assignees', 'firstName lastName userName')
+    .populate('organization', 'name')
+    .sort({ createdAt: -1 });
+
+  // חיפוש במשימות קבועות
+  const recurringTasks = await RecurringTask.find(baseFilter)
+    .populate('creator', 'firstName lastName userName')
+    .populate('mainAssignee', 'firstName lastName userName')
+    .populate('assignees', 'firstName lastName userName')
+    .populate('organization', 'name')
+    .sort({ createdAt: -1 });
+
+  // שילוב והעשרת הנתונים
+  const allTasks = [];
+
+  for (const task of regularTasks) {
+    const assigneeDetails = await getAssigneeDetails(task._id, 'Task');
+    allTasks.push({
+      ...task.toObject(),
+      daysOpen: task.daysOpen,
+      taskType: 'רגילה',
+      assigneeDetails
+    });
+  }
+
+  for (const task of recurringTasks) {
+    const assigneeDetails = await getAssigneeDetails(task._id, 'RecurringTask');
+    allTasks.push({
+      ...task.toObject(),
+      daysOpen: task.daysOpen,
+      taskType: 'קבועה',
+      assigneeDetails
+    });
+  }
+
+  // קיבוץ לפי עובדים
+  const tasksByEmployee = {};
+
+  allTasks.forEach(task => {
+    const employees = [
+      { id: task.creator._id, name: `${task.creator.firstName} ${task.creator.lastName}`, userName: task.creator.userName, role: 'יוצר' },
+      { id: task.mainAssignee._id, name: `${task.mainAssignee.firstName} ${task.mainAssignee.lastName}`, userName: task.mainAssignee.userName, role: 'אחראי ראשי' }
     ];
 
-    const regularTasks = await Task.aggregate(pipeline);
-    const recurringTasks = await RecurringTask.aggregate(pipeline);
-
-    const allTasks = [...regularTasks, ...recurringTasks];
-
-    // ארגון הנתונים לפי אחריות
-    const responsibilityReport = {
-      mainResponsible: {},
-      secondaryResponsible: {},
-      summary: {
-        totalTasks: allTasks.length,
-        mainAssignees: new Set(),
-        secondaryAssignees: new Set(),
-        byImportance: {},
-        byStatus: {}
+    task.assignees.forEach(assignee => {
+      if (assignee._id.toString() !== task.mainAssignee._id.toString()) {
+        employees.push({
+          id: assignee._id,
+          name: `${assignee.firstName} ${assignee.lastName}`,
+          userName: assignee.userName,
+          role: 'אחראי משני'
+        });
       }
-    };
+    });
 
-    allTasks.forEach(task => {
-      const mainAssignee = task.mainAssigneeData[0];
-      const assignees = task.assigneesData;
+    employees.forEach(emp => {
+      if (!tasksByEmployee[emp.id]) {
+        tasksByEmployee[emp.id] = {
+          employee: emp,
+          tasks: [],
+          summary: {
+            total: 0,
+            byImportance: {},
+            byStatus: {},
+            overdue: 0,
+            avgDaysOpen: 0,
+            oldestOpenDays: 0
+          }
+        };
+      }
 
-      // אחראי ראשי
-      if (mainAssignee && (!employeeId || mainAssignee._id.toString() === employeeId)) {
-        const mainKey = mainAssignee._id.toString();
-        if (!responsibilityReport.mainResponsible[mainKey]) {
-          responsibilityReport.mainResponsible[mainKey] = {
+      tasksByEmployee[emp.id].tasks.push({ ...task, employeeRole: emp.role });
+      tasksByEmployee[emp.id].summary.total++;
+      tasksByEmployee[emp.id].summary.byImportance[task.importance] =
+        (tasksByEmployee[emp.id].summary.byImportance[task.importance] || 0) + 1;
+      tasksByEmployee[emp.id].summary.byStatus[task.status] =
+        (tasksByEmployee[emp.id].summary.byStatus[task.status] || 0) + 1;
+
+      // בדיקה אם המשימה באיחור
+      if (task.finalDeadline && new Date(task.finalDeadline) < new Date()) {
+        tasksByEmployee[emp.id].summary.overdue++;
+      }
+    });
+  });
+
+  // חישוב ממוצע וותק משימות לכל עובד
+  Object.values(tasksByEmployee).forEach(empData => {
+    const daysArr = empData.tasks.map(t => t.daysOpen);
+    if (daysArr.length > 0) {
+      const sum = daysArr.reduce((a, b) => a + b, 0);
+      empData.summary.avgDaysOpen = Math.round(sum / daysArr.length);
+      empData.summary.oldestOpenDays = Math.max(...daysArr);
+    }
+  });
+  let result = Object.values(tasksByEmployee);
+  if (req.query.employeeId) {
+    result = result.filter(emp => emp.employee.id.toString() === req.query.employeeId);
+  }
+
+  res.json({
+    success: true,
+    data: result,
+    totalTasks: allTasks.length,
+    appliedFilters: req.query
+  });
+
+
+};
+// 2. דוח משימות לפי אחראים ראשיים ומשניים
+export const getTasksByResponsibility = async (req, res) => {
+  const {
+    responsibilityType = 'all' // 'main', 'secondary', 'all'
+  } = req.query;
+
+  const userId = req.user.id;
+
+  // שמירת פילטר
+  saveUserFilter(userId, 'tasksByResponsibility', req.query);
+
+  // בניית פילטר באמצעות הפונקציה המרכזית - ללא employeeId
+  const { employeeId, ...filterParams } = req.query;
+  let baseFilter = buildTaskFilter(filterParams);
+
+  // המרת associationId ל-ObjectId עבור aggregation
+  if (baseFilter.organization) {
+    baseFilter.organization = new mongoose.Types.ObjectId(baseFilter.organization);
+  }
+
+  // בניית pipeline לאגרגציה
+  const pipeline = [
+    { $match: baseFilter },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'mainAssignee',
+        foreignField: '_id',
+        as: 'mainAssigneeData'
+      }
+    },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'assignees',
+        foreignField: '_id',
+        as: 'assigneesData'
+      }
+    },
+    {
+      $lookup: {
+        from: 'associations',
+        localField: 'organization',
+        foreignField: '_id',
+        as: 'organizationData'
+      }
+    }
+  ];
+
+  const regularTasks = await Task.aggregate(pipeline);
+  const recurringTasks = await RecurringTask.aggregate(pipeline);
+
+  const allTasks = [...regularTasks, ...recurringTasks];
+
+  // ארגון הנתונים לפי אחריות
+  const responsibilityReport = {
+    mainResponsible: {},
+    secondaryResponsible: {},
+    summary: {
+      totalTasks: allTasks.length,
+      mainAssignees: new Set(),
+      secondaryAssignees: new Set(),
+      byImportance: {},
+      byStatus: {}
+    }
+  };
+
+  allTasks.forEach(task => {
+    const mainAssignee = task.mainAssigneeData[0];
+    const assignees = task.assigneesData;
+
+    // אחראי ראשי
+    if (mainAssignee && (!req.query.employeeId || mainAssignee._id.toString() === req.query.employeeId)) {
+      const mainKey = mainAssignee._id.toString();
+      if (!responsibilityReport.mainResponsible[mainKey]) {
+        responsibilityReport.mainResponsible[mainKey] = {
+          employee: {
+            id: mainAssignee._id,
+            name: `${mainAssignee.firstName} ${mainAssignee.lastName}`,
+            userName: mainAssignee.userName
+          },
+          tasks: [],
+          summary: { total: 0, byImportance: {}, byStatus: {} }
+        };
+      }
+
+      responsibilityReport.mainResponsible[mainKey].tasks.push({
+        ...task,
+        taskType: task.frequencyType ? 'קבועה' : 'רגילה'
+      });
+      responsibilityReport.mainResponsible[mainKey].summary.total++;
+      responsibilityReport.summary.mainAssignees.add(mainKey);
+
+      // עדכון סיכומים
+      responsibilityReport.mainResponsible[mainKey].summary.byStatus[task.status] =
+        (responsibilityReport.mainResponsible[mainKey].summary.byStatus[task.status] || 0) + 1;
+
+      responsibilityReport.mainResponsible[mainKey].summary.byImportance[task.importance] =
+        (responsibilityReport.mainResponsible[mainKey].summary.byImportance[task.importance] || 0) + 1;
+    }
+
+    // אחראים משניים
+    assignees.forEach(assignee => {
+      if (assignee._id.toString() !== task.mainAssignee.toString() &&
+        (!req.query.employeeId || assignee._id.toString() === req.query.employeeId)) {
+
+        const secondaryKey = assignee._id.toString();
+        if (!responsibilityReport.secondaryResponsible[secondaryKey]) {
+          responsibilityReport.secondaryResponsible[secondaryKey] = {
             employee: {
-              id: mainAssignee._id,
-              name: `${mainAssignee.firstName} ${mainAssignee.lastName}`,
-              userName: mainAssignee.userName
+              id: assignee._id,
+              name: `${assignee.firstName} ${assignee.lastName}`,
+              userName: assignee.userName
             },
             tasks: [],
             summary: { total: 0, byImportance: {}, byStatus: {} }
           };
         }
 
-        responsibilityReport.mainResponsible[mainKey].tasks.push({
+        responsibilityReport.secondaryResponsible[secondaryKey].tasks.push({
           ...task,
           taskType: task.frequencyType ? 'קבועה' : 'רגילה'
         });
-        responsibilityReport.mainResponsible[mainKey].summary.total++;
-        responsibilityReport.summary.mainAssignees.add(mainKey);
-        // אחראי ראשי
-        responsibilityReport.mainResponsible[mainKey].summary.byStatus[task.status] =
-          (responsibilityReport.mainResponsible[mainKey].summary.byStatus[task.status] || 0) + 1;
+        responsibilityReport.secondaryResponsible[secondaryKey].summary.total++;
+        responsibilityReport.summary.secondaryAssignees.add(secondaryKey);
 
-        responsibilityReport.mainResponsible[mainKey].summary.byImportance[task.importance] =
-          (responsibilityReport.mainResponsible[mainKey].summary.byImportance[task.importance] || 0) + 1;
+        responsibilityReport.secondaryResponsible[secondaryKey].summary.byStatus[task.status] =
+          (responsibilityReport.secondaryResponsible[secondaryKey].summary.byStatus[task.status] || 0) + 1;
 
+        responsibilityReport.secondaryResponsible[secondaryKey].summary.byImportance[task.importance] =
+          (responsibilityReport.secondaryResponsible[secondaryKey].summary.byImportance[task.importance] || 0) + 1;
       }
-
-      // אחראים משניים
-      assignees.forEach(assignee => {
-        if (assignee._id.toString() !== task.mainAssignee.toString() &&
-          (!employeeId || assignee._id.toString() === employeeId)) {
-
-          const secondaryKey = assignee._id.toString();
-          if (!responsibilityReport.secondaryResponsible[secondaryKey]) {
-            responsibilityReport.secondaryResponsible[secondaryKey] = {
-              employee: {
-                id: assignee._id,
-                name: `${assignee.firstName} ${assignee.lastName}`,
-                userName: assignee.userName
-              },
-              tasks: [],
-              summary: { total: 0, byImportance: {}, byStatus: {} }
-            };
-          }
-
-          responsibilityReport.secondaryResponsible[secondaryKey].tasks.push({
-            ...task,
-            taskType: task.frequencyType ? 'קבועה' : 'רגילה'
-          });
-          responsibilityReport.secondaryResponsible[secondaryKey].summary.total++;
-          responsibilityReport.summary.secondaryAssignees.add(secondaryKey);
-
-          responsibilityReport.secondaryResponsible[secondaryKey].summary.byStatus[task.status] =
-            (responsibilityReport.secondaryResponsible[secondaryKey].summary.byStatus[task.status] || 0) + 1;
-
-          responsibilityReport.secondaryResponsible[secondaryKey].summary.byImportance[task.importance] =
-            (responsibilityReport.secondaryResponsible[secondaryKey].summary.byImportance[task.importance] || 0) + 1;
-
-
-        }
-      });
-
-      // סיכום כללי
-      responsibilityReport.summary.byImportance[task.importance] =
-        (responsibilityReport.summary.byImportance[task.importance] || 0) + 1;
-      responsibilityReport.summary.byStatus[task.status] =
-        (responsibilityReport.summary.byStatus[task.status] || 0) + 1;
     });
 
-    // פילטר לפי סוג אחריות
-    let filteredResponse = responsibilityReport;
-    if (responsibilityType === 'main') {
-      filteredResponse = {
-        mainResponsible: responsibilityReport.mainResponsible,
-        summary: {
-          ...responsibilityReport.summary,
-          secondaryResponsible: {}
-        }
-      };
-    } else if (responsibilityType === 'secondary') {
-      filteredResponse = {
-        secondaryResponsible: responsibilityReport.secondaryResponsible,
-        summary: {
-          ...responsibilityReport.summary,
-          mainResponsible: {}
-        }
-      };
-    }
+    // סיכום כללי
+    responsibilityReport.summary.byImportance[task.importance] =
+      (responsibilityReport.summary.byImportance[task.importance] || 0) + 1;
+    responsibilityReport.summary.byStatus[task.status] =
+      (responsibilityReport.summary.byStatus[task.status] || 0) + 1;
+  });
 
-    res.json({
-      success: true,
-      data: filteredResponse,
-      appliedFilters: req.query
-    });
-
-  } catch (error) {
-    console.error('Error in getTasksByResponsibility:', error);
-    res.status(500).json({ success: false, message: 'שגיאה בשליפת דוח אחריות' });
+  // פילטר לפי סוג אחריות
+  let filteredResponse = responsibilityReport;
+  if (responsibilityType === 'main') {
+    filteredResponse = {
+      mainResponsible: responsibilityReport.mainResponsible,
+      summary: {
+        ...responsibilityReport.summary,
+        secondaryResponsible: {}
+      }
+    };
+  } else if (responsibilityType === 'secondary') {
+    filteredResponse = {
+      secondaryResponsible: responsibilityReport.secondaryResponsible,
+      summary: {
+        ...responsibilityReport.summary,
+        mainResponsible: {}
+      }
+    };
   }
-};
 
+  res.json({
+    success: true,
+    data: filteredResponse,
+    appliedFilters: req.query
+  });
+
+
+};
 // 3. דוח משימות חורגות מיעד
 export const getOverdueTasks = async (req, res) => {
   try {
     const {
-      employeeId,
-      organization,
-      importance,
       daysOverdue = 1, // כמה ימים באיחור לפחות
       includeNoDeadline = false // האם לכלול משימות ללא תאריך יעד
     } = req.query;
 
     const userId = req.user.id;
-    const userRole = req.user.role;
 
+    // שמירת פילטר
     saveUserFilter(userId, 'overdueTasks', req.query);
 
-    let baseFilter = buildBaseFilter(userId, userRole);
+    // בניית פילטר באמצעות הפונקציה המרכזית
+    let baseFilter = buildTaskFilter(req.query);
 
-    // פילטר למשימות שלא הושלמו
-    baseFilter.status = { $nin: ['הושלם', 'בוטלה'] };
+    // פילטר למשימות שלא הושלמו - תמיד לאכוף את זה
+    if (baseFilter.status) {
+      // אם יש סינון סטטוס, שלב אותו עם הדרישה שלא יהיו משימות מושלמות/מבוטלות
+      if (Array.isArray(baseFilter.status.$in)) {
+        baseFilter.status.$in = baseFilter.status.$in.filter(s => !['הושלם', 'בוטלה'].includes(s));
+      } else if (baseFilter.status !== 'הושלם' && baseFilter.status !== 'בוטלה') {
+        // סטטוס בודד שאינו הושלם/בוטלה
+        baseFilter.status = { $nin: ['הושלם', 'בוטלה'], $eq: baseFilter.status };
+      } else {
+        // אם הסטטוס שנבחר הוא הושלם/בוטלה - החזר ריק
+        return res.json({ success: true, data: [], statistics: {}, appliedFilters: req.query });
+      }
+    } else {
+      baseFilter.status = { $nin: ['הושלם', 'בוטלה'] };
+    }
 
     // פילטר לתאריך יעד שעבר
     const now = new Date();
     const overdueDate = new Date(now.getTime() - (daysOverdue * 24 * 60 * 60 * 1000));
 
     if (includeNoDeadline === 'true') {
-      baseFilter.$or = [
-        { finalDeadline: { $lt: overdueDate } },
-        { finalDeadline: { $exists: false } },
-        { finalDeadline: null }
-      ];
+      // שמירת ה-$or הקיים אם יש
+      const existingOr = baseFilter.$or;
+      baseFilter.$and = [
+        existingOr ? { $or: existingOr } : {},
+        {
+          $or: [
+            { finalDeadline: { $lt: overdueDate } },
+            { finalDeadline: { $exists: false } },
+            { finalDeadline: null }
+          ]
+        }
+      ].filter(Boolean);
+      delete baseFilter.$or; // מסירים את ה-$or הישן
     } else {
       baseFilter.finalDeadline = { $lt: overdueDate };
     }
-
-    if (employeeId) {
-      baseFilter.$and = [
-        baseFilter.$and || {},
-        {
-          $or: [
-            { creator: employeeId },
-            { mainAssignee: employeeId },
-            { assignees: { $in: [employeeId] } }
-          ]
-        }
-      ];
-    }
-
-    if (organization) baseFilter.organization = organization;
-    if (importance) baseFilter.importance = importance;
 
     const overdueTasks = await Task.find(baseFilter)
       .populate('creator', 'firstName lastName userName')
@@ -471,7 +588,7 @@ export const getOverdueTasks = async (req, res) => {
       return {
         ...task.toObject(),
         daysOverdue: daysOverdueCount,
-        daysOpen: calculateDaysOpen(task.createdAt),
+        daysOpen: task.daysOpen,
         assigneeDetails,
         severity: daysOverdueCount > 30 ? 'קריטי' : daysOverdueCount > 7 ? 'חמור' : 'קל'
       };
@@ -519,68 +636,65 @@ export const getOverdueTasks = async (req, res) => {
     res.status(500).json({ success: false, message: 'שגיאה בשליפת דוח משימות באיחור' });
   }
 };
-
-// 4. סיכום משימות לפי תקופה/
+// 4. סיכום משימות לפי תקופה
 export const getTasksSummaryByPeriod = async (req, res) => {
   try {
     const {
-      period = 'month', // 'week', 'month', 'year'
-      startDate,
-      endDate,
-      employeeId,
-      organization,
-      importance
+      period = 'month' // 'week', 'month', 'year'
     } = req.query;
 
     const userId = req.user.id;
-    const userRole = req.user.role;
 
+    // שמירת פילטר
     saveUserFilter(userId, 'tasksSummary', req.query);
 
-    let baseFilter = buildBaseFilter(userId, userRole);
+    // בניית פילטר באמצעות הפונקציה המרכזית
+    let baseFilter = buildTaskFilter(req.query);
 
-    // קביעת טווח תאריכים
-    let periodStart, periodEnd;
-    if (startDate && endDate) {
-      // אם נבחר טווח מותאם אישית
-      periodStart = new Date(startDate);
-      periodEnd = new Date(endDate);
-    } else {
+    // המרת associationId ל-ObjectId עבור aggregation
+    if (baseFilter.organization) {
+      baseFilter.organization = new mongoose.Types.ObjectId(baseFilter.organization);
+    }
+
+    // המרת employeeId fields לפני aggregation
+    if (baseFilter.$or) {
+      baseFilter.$or = baseFilter.$or.map(condition => {
+        const newCondition = { ...condition };
+        Object.keys(newCondition).forEach(key => {
+          if (['creator', 'mainAssignee'].includes(key)) {
+            newCondition[key] = new mongoose.Types.ObjectId(newCondition[key]);
+          }
+          if (key === 'assignees' && newCondition[key].$in) {
+            newCondition[key].$in = newCondition[key].$in.map(id => new mongoose.Types.ObjectId(id));
+          }
+        });
+        return newCondition;
+      });
+    }
+    // קביעת טווח תאריכים (רק אם לא הוגדר טווח מותאם אישית)
+    if (!req.query.startDate || !req.query.endDate) {
       const now = new Date();
       const MAX_PERIODS = period === 'week' ? 10 : period === 'month' ? 12 : 10;
+      let periodStart;
 
       switch (period) {
         case 'week':
-          periodEnd = now;
           periodStart = new Date();
-          periodStart.setDate(periodEnd.getDate() - (MAX_PERIODS * 7));
+          periodStart.setDate(now.getDate() - (MAX_PERIODS * 7));
           break;
         case 'month':
-          periodEnd = now;
-          periodStart = new Date(periodEnd.getFullYear(), periodEnd.getMonth() - (MAX_PERIODS - 1), 1);
+          periodStart = new Date(now.getFullYear(), now.getMonth() - (MAX_PERIODS - 1), 1);
           break;
         case 'year':
-          periodEnd = now;
-          periodStart = new Date(periodEnd.getFullYear() - (MAX_PERIODS - 1), 0, 1);
+          periodStart = new Date(now.getFullYear() - (MAX_PERIODS - 1), 0, 1);
           break;
       }
+
+      baseFilter.createdAt = {
+        $gte: periodStart,
+        $lte: now
+      };
     }
-
-    baseFilter.createdAt = {
-      $gte: periodStart,
-      $lte: periodEnd
-    };
-
-    if (employeeId) {
-      baseFilter.$or = [
-        { creator: employeeId },
-        { mainAssignee: employeeId },
-        { assignees: { $in: [employeeId] } }
-      ];
-    }
-
-    if (organization) baseFilter.organization = organization;
-    if (importance) baseFilter.importance = importance;
 
     // אגרגציה לקבלת נתונים מקובצים
     const summaryPipeline = [
@@ -680,8 +794,8 @@ export const getTasksSummaryByPeriod = async (req, res) => {
       overallStats,
       period: {
         type: period,
-        start: periodStart,
-        end: periodEnd
+        start: baseFilter.createdAt?.$gte,
+        end: baseFilter.createdAt?.$lte
       },
       appliedFilters: req.query
     });
@@ -691,353 +805,33 @@ export const getTasksSummaryByPeriod = async (req, res) => {
     res.status(500).json({ success: false, message: 'שגיאה בשליפת סיכום משימות' });
   }
 };
-
-
 // 5. סטטיסטיקה אישית לעובד
-// export const getEmployeePersonalStats = async (req, res) => {
-//   try {
-//     const { employeeId, period = 'month' } = req.query;
-//     const targetEmployeeId = employeeId || req.user.id;
-
-//     const userId = req.user.id;
-
-//     saveUserFilter(userId, 'personalStats', req.query);
-
-//     // קביעת טווח תאריכים
-//     const now = new Date();
-//     let startDate;
-//     switch (period) {
-//       case 'week':
-//         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-//         break;
-//       case 'month':
-//         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-//         break;
-//       case 'year':
-//         startDate = new Date(now.getFullYear(), 0, 1);
-//         break;
-//     }
-
-//     // בניית פילטר בסיסי
-//     const baseFilter = {
-//       isDeleted: { $ne: true },
-//       $or: [
-//         { creator: targetEmployeeId },
-//         { mainAssignee: targetEmployeeId },
-//         { assignees: { $in: [targetEmployeeId] } }
-//       ]
-//     };
-
-//     if (startDate) {
-//       baseFilter.createdAt = { $gte: startDate };
-//     }
-
-//     // שליפת משימות
-//     const tasks = await Task.find(baseFilter)
-//       .populate('organization', 'name')
-//       .sort({ createdAt: -1 });
-
-//     const recurringTasks = await RecurringTask.find(baseFilter)
-//       .populate('organization', 'name')
-//       .sort({ createdAt: -1 });
-
-//     const allTasks = [...tasks, ...recurringTasks];
-
-//     // שליפת פרטי assignee עבור המשתמש הספציפי
-//     const assigneeDetailsPromises = allTasks.map(async (task) => {
-//       const details = await getAssigneeDetails(
-//         task._id,
-//         task.frequencyType ? 'RecurringTask' : 'Task',
-//         targetEmployeeId
-//       );
-//       return { task, details: details[0] || null };
-//     });
-
-//     const tasksWithDetails = await Promise.all(assigneeDetailsPromises);
-
-//     // חישוב סטטיסטיקות
-//     const stats = {
-//       overview: {
-//         totalTasks: allTasks.length,
-//         completed: 0,
-//         inProgress: 0,
-//         overdue: 0,
-//         completionRate: 0
-//       },
-//       byRole: {
-//         asCreator: 0,
-//         asMainAssignee: 0,
-//         asSecondaryAssignee: 0
-//       },
-//       byImportance: {},
-//       byStatus: {},
-//       byOrganization: {},
-//       goals: {
-//         daily: [],
-//         weekly: [],
-//         monthly: []
-//       }
-//     };
-
-//     const now_ts = now.getTime();
-
-//     allTasks.forEach(task => {
-//       // ספירה כללית
-//       if (task.status === 'הושלם') stats.overview.completed++;
-//       if (task.status === 'בתהליך') stats.overview.inProgress++;
-//       if (task.finalDeadline && new Date(task.finalDeadline).getTime() < now_ts && task.status !== 'הושלם') {
-//         stats.overview.overdue++;
-//       }
-
-//       // לפי תפקיד
-//       if (task.creator.toString() === targetEmployeeId) stats.byRole.asCreator++;
-//       if (task.mainAssignee.toString() === targetEmployeeId) stats.byRole.asMainAssignee++;
-//       if (task.assignees.some(id => id.toString() === targetEmployeeId) &&
-//         task.mainAssignee.toString() !== targetEmployeeId) {
-//         stats.byRole.asSecondaryAssignee++;
-//       }
-
-//       // לפי חשיבות וסטטוס
-//       stats.byImportance[task.importance] = (stats.byImportance[task.importance] || 0) + 1;
-//       stats.byStatus[task.status] = (stats.byStatus[task.status] || 0) + 1;
-
-//       // לפי ארגון
-//       const orgName = task.organization?.name || 'ללא ארגון';
-//       stats.byOrganization[orgName] = (stats.byOrganization[orgName] || 0) + 1;
-//     });
-
-//     // חישוב אחוז השלמה
-//     stats.overview.completionRate = stats.overview.totalTasks > 0 ?
-//       Math.round((stats.overview.completed / stats.overview.totalTasks) * 100) : 0;
-
-
-
-//     // שליפת יעדים אישיים
-//     const personalGoals = await Goal.find({
-//       $or: [
-//         { targetType: 'עובד בודד', employee: targetEmployeeId },
-//         { targetType: 'כלל העובדים' }
-//       ]
-//     });
-
-//     // מיפוי תדירויות
-//     const freqMap = { יומי: 'daily', שבועי: 'weekly', חודשי: 'monthly' };
-
-//     // חישוב התקדמות ביעדים
-//     for (const goal of personalGoals) {
-//       const goalPeriodStart = getGoalPeriodStart(goal.frequency);
-//       const relevantTasks = allTasks.filter(task => {
-//         return task.createdAt >= goalPeriodStart &&
-//           task.importance === goal.importance &&
-//           (!goal.subImportance || task.subImportance === goal.subImportance) &&
-//           task.status === 'הושלם';
-//       });
-
-//       const progress = {
-//         goal: goal.targetCount,
-//         achieved: relevantTasks.length,
-//         percentage: Math.round((relevantTasks.length / goal.targetCount) * 100),
-//         importance: goal.importance,
-//         subImportance: goal.subImportance,
-//         frequency: goal.frequency
-//       };
-
-//       const key = freqMap[goal.frequency];
-//       if (!stats.goals[key]) stats.goals[key] = [];
-//       stats.goals[key].push(progress);
-//     }
-
-//     res.json({
-//       success: true,
-//       employee: {
-//         id: targetEmployeeId,
-//       },
-//       period: {
-//         type: period,
-//         start: startDate,
-//         end: now
-//       },
-//       stats,
-//       appliedFilters: req.query
-//     });
-
-//   } catch (error) {
-//     console.error('Error in getEmployeePersonalStats:', error);
-//     res.status(500).json({ success: false, message: 'שגיאה בשליפת סטטיסטיקות אישיות' });
-//   }
-// };
-// export const getEmployeePersonalStats = async (req, res) => {
-//   try {
-//     const { period = 'month', employeeId } = req.query;
-
-//     // 1. קביעת טווח תאריכים
-//     const now = new Date();
-//     let startDate;
-//     switch (period) {
-//       case 'week':
-//         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-//         break;
-//       case 'month':
-//         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-//         break;
-//       case 'year':
-//         startDate = new Date(now.getFullYear(), 0, 1);
-//         break;
-//     }
-
-//     // 2. רשימת עובדים: אם נשלח employeeId רק הוא, אחרת כל העובדים
-//     const employees = employeeId
-//       ? await User.find({ _id: employeeId })
-//       : await User.find();
-
-//     const statsByEmployee = {};
-
-//     // 3. עבור כל עובד נחשב סטטיסטיקות
-//     for (const emp of employees) {
-//       const targetEmployeeId = emp._id.toString();
-
-//       // פילטר משימות רק עבור העובד
-//       const baseFilter = {
-//         isDeleted: { $ne: true },
-//         $or: [
-//           { creator: targetEmployeeId },
-//           { mainAssignee: targetEmployeeId },
-//           { assignees: { $in: [targetEmployeeId] } }
-//         ]
-//       };
-
-//       if (startDate) baseFilter.createdAt = { $gte: startDate };
-
-//       const tasks = await Task.find(baseFilter).populate('organization', 'name');
-//       const recurringTasks = await RecurringTask.find(baseFilter).populate('organization', 'name');
-//       const allTasks = [...tasks, ...recurringTasks];
-
-//       // שליפת פרטי assignee
-//       const tasksWithDetails = await Promise.all(allTasks.map(async (task) => {
-//         const details = await getAssigneeDetails(
-//           task._id,
-//           task.frequencyType ? 'RecurringTask' : 'Task',
-//           targetEmployeeId
-//         );
-//         return { task, details: details[0] || null };
-//       }));
-
-//       // חישוב סטטיסטיקות
-//       const stats = {
-//         overview: { totalTasks: allTasks.length, completed: 0, inProgress: 0, overdue: 0, completionRate: 0 },
-//         byRole: { asCreator: 0, asMainAssignee: 0, asSecondaryAssignee: 0 },
-//         byImportance: {},
-//         byStatus: {},
-//         byOrganization: {},
-//         recentActivity: [],
-//         goals: { daily: [], weekly: [], monthly: [] }
-//       };
-
-//       const now_ts = now.getTime();
-//       allTasks.forEach(task => {
-//         if (task.status === 'הושלם') stats.overview.completed++;
-//         if (task.status === 'בתהליך') stats.overview.inProgress++;
-//         if (task.finalDeadline && new Date(task.finalDeadline).getTime() < now_ts && task.status !== 'הושלם')
-//           stats.overview.overdue++;
-
-//         if (task.creator.toString() === targetEmployeeId) stats.byRole.asCreator++;
-//         if (task.mainAssignee.toString() === targetEmployeeId) stats.byRole.asMainAssignee++;
-//         if (task.assignees.some(id => id.toString() === targetEmployeeId) &&
-//           task.mainAssignee.toString() !== targetEmployeeId) stats.byRole.asSecondaryAssignee++;
-
-//         stats.byImportance[task.importance] = (stats.byImportance[task.importance] || 0) + 1;
-//         stats.byStatus[task.status] = (stats.byStatus[task.status] || 0) + 1;
-//         const orgName = task.organization?.name || 'ללא ארגון';
-//         stats.byOrganization[orgName] = (stats.byOrganization[orgName] || 0) + 1;
-//       });
-
-//       stats.overview.completionRate = stats.overview.totalTasks > 0
-//         ? Math.round((stats.overview.completed / stats.overview.totalTasks) * 100)
-//         : 0;
-
-//       stats.recentActivity = tasksWithDetails
-//         .sort((a, b) => new Date(b.task.updatedAt) - new Date(a.task.updatedAt))
-//         .slice(0, 10)
-//         .map(item => ({
-//           taskId: item.task.taskId,
-//           title: item.task.title,
-//           status: item.details?.status || item.task.status,
-//           updatedAt: item.task.updatedAt,
-//           importance: item.task.importance,
-//           organization: item.task.organization?.name
-//         }));
-
-//       // שליפת יעדים אישיים בלבד
-//       const personalGoals = await Goal.find({
-//         targetType: 'עובד בודד',
-//         employee: targetEmployeeId
-//       });
-
-//       for (const goal of personalGoals) {
-//         const goalPeriodStart = getGoalPeriodStart(goal.frequency);
-//         const relevantTasks = allTasks.filter(task =>
-//           (task.creator.toString() === targetEmployeeId ||
-//             task.mainAssignee.toString() === targetEmployeeId ||
-//             task.assignees.includes(targetEmployeeId)) &&
-//           task.createdAt >= goalPeriodStart &&
-//           task.importance === goal.importance &&
-//           (!goal.subImportance || task.subImportance === goal.subImportance) &&
-//           task.status === 'הושלם'
-//         );
-
-//         const progress = {
-//           goal: goal.targetCount,
-//           achieved: relevantTasks.length,
-//           percentage: Math.round((relevantTasks.length / goal.targetCount) * 100),
-//           importance: goal.importance,
-//           subImportance: goal.subImportance,
-//           frequency: goal.frequency
-//         };
-//         const frequencyMap = {
-//           'יומי': 'daily',
-//           'שבועי': 'weekly',
-//           'חודשי': 'monthly'
-//         };
-
-//         const freqKey = frequencyMap[goal.frequency];
-//         if (freqKey) {
-//           stats.goals[freqKey].push(progress);
-//         }
-//       }
-
-//       statsByEmployee[targetEmployeeId] = {
-//         employee: { id: targetEmployeeId, name: emp.firstName + ' ' + emp.lastName },
-//         stats
-//       };
-//     }
-
-//     res.json({
-//       success: true,
-//       period: { type: period, start: startDate, end: now },
-//       statsByEmployee
-//     });
-
-//   } catch (error) {
-//     console.error('Error in getAllEmployeesPersonalStats:', error);
-//     res.status(500).json({ success: false, message: 'שגיאה בשליפת סטטיסטיקות אישיות' });
-//   }
-// };
-
-
-// פונקציה עוזרת לחישוב אחוזים
 const calculatePercentage = (achieved, total) => total > 0 ? Math.round((achieved / total) * 100) : 0;
 
 export const getEmployeePersonalStats = async (req, res) => {
   try {
-    // שליפת כל העובדים בלבד
-    const employees = await User.find({ role: 'עובד' });
+    const userId = req.user.id;
+
+    // שמירת פילטר
+    saveUserFilter(userId, 'employeePersonalStats', req.query);
+
+    // בניית פילטר באמצעות הפונקציה המרכזית
+    const taskFilter = buildTaskFilter(req.query);
+
+    // שליפת כל העובדים או עובד ספציפי
+    let employeesQuery = { role: 'עובד' };
+    if (req.query.employeeId) {
+      employeesQuery._id = req.query.employeeId;
+    }
+
+    const employees = await User.find(employeesQuery);
 
     const employeeStats = await Promise.all(employees.map(async (employee) => {
       const empId = employee._id.toString();
 
-      // שליפת כל המשימות הרגילות והקבועות של העובד
+      // שילוב פילטר העובד עם הפילטרים האחרים
       const baseFilter = {
-        isDeleted: { $ne: true },
+        ...taskFilter,
         $or: [
           { creator: empId },
           { mainAssignee: empId },
@@ -1051,7 +845,11 @@ export const getEmployeePersonalStats = async (req, res) => {
 
       const totalTasks = allTasks.length;
       const completedTasks = allTasks.filter(t => t.status === 'הושלם').length;
-      const overdueTasks = allTasks.filter(t => t.finalDeadline && new Date(t.finalDeadline) < new Date() && t.status !== 'הושלם').length;
+      const overdueTasks = allTasks.filter(t =>
+        t.finalDeadline &&
+        new Date(t.finalDeadline) < new Date() &&
+        t.status !== 'הושלם'
+      ).length;
 
       const completionRate = calculatePercentage(completedTasks, totalTasks);
       const onTimeRate = calculatePercentage(totalTasks - overdueTasks, totalTasks);
@@ -1090,192 +888,67 @@ export const getEmployeePersonalStats = async (req, res) => {
 
     res.json({
       success: true,
-      data: employeeStats
-    });
-
-  } catch (error) {
-    console.error('Error in getAllEmployeesPersonalStats:', error);
-    res.status(500).json({ success: false, message: 'שגיאה בשליפת סטטיסטיקות אישיות' });
-  }
-};
-
-
-// פונקציית עזר לחישוב תחילת תקופת יעד
-const getGoalPeriodStart = (frequency) => {
-  const now = new Date();
-  switch (frequency) {
-    case 'daily':
-      return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    case 'weekly':
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - now.getDay());
-      return startOfWeek;
-    case 'monthly':
-      return new Date(now.getFullYear(), now.getMonth(), 1);
-    default:
-      return new Date(now.getFullYear(), now.getMonth(), 1);
-  }
-};
-
-// 6. דוח משימות לפי סיבת אי-ביצוע
-export const getTasksByFailureReason = async (req, res) => {
-  try {
-    const {
-      startDate,
-      endDate,
-      employeeId,
-      organization,
-      failureReason
-    } = req.query;
-
-    const userId = req.user.id;
-    const userRole = req.user.role;
-
-    saveUserFilter(userId, 'failureReasons', req.query);
-
-    let baseFilter = buildBaseFilter(userId, userRole);
-
-    // רק משימות עם סיבת אי-ביצוע
-    baseFilter.failureReason = { $exists: true, $ne: null, $ne: "" };
-
-    if (startDate && endDate) {
-      baseFilter.updatedAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
-    }
-
-    if (employeeId) {
-      baseFilter.$or = [
-        { creator: employeeId },
-        { mainAssignee: employeeId },
-        { assignees: { $in: [employeeId] } }
-      ];
-    }
-
-    if (organization) baseFilter.organization = organization;
-    if (failureReason) baseFilter.failureReason = new RegExp(failureReason, 'i');
-
-    const tasksWithFailures = await Task.find(baseFilter)
-      .populate('creator', 'firstName lastName userName')
-      .populate('mainAssignee', 'firstName lastName userName')
-      .populate('assignees', 'firstName lastName userName')
-      .populate('organization', 'name')
-      .sort({ updatedAt: -1 });
-
-    // קיבוץ לפי סיבת אי-ביצוע
-    const failureAnalysis = {};
-    const employeeFailures = {};
-
-    tasksWithFailures.forEach(task => {
-      const reason = task.failureReason;
-
-      // קיבוץ לפי סיבה
-      if (!failureAnalysis[reason]) {
-        failureAnalysis[reason] = {
-          reason,
-          count: 0,
-          tasks: [],
-          employees: new Set(),
-          organizations: new Set()
-        };
-      }
-
-      failureAnalysis[reason].count++;
-      failureAnalysis[reason].tasks.push(task);
-      failureAnalysis[reason].employees.add(`${task.mainAssignee.firstName} ${task.mainAssignee.lastName}`);
-      failureAnalysis[reason].organizations.add(task.organization.name);
-
-      // קיבוץ לפי עובד
-      const employeeName = `${task.mainAssignee.firstName} ${task.mainAssignee.lastName}`;
-      if (!employeeFailures[employeeName]) {
-        employeeFailures[employeeName] = {
-          employee: employeeName,
-          employeeId: task.mainAssignee._id,
-          totalFailures: 0,
-          byReason: {},
-          tasks: []
-        };
-      }
-
-      employeeFailures[employeeName].totalFailures++;
-      employeeFailures[employeeName].byReason[reason] =
-        (employeeFailures[employeeName].byReason[reason] || 0) + 1;
-      employeeFailures[employeeName].tasks.push(task);
-    });
-
-    // המרת Set לאריי בניתוח הכשלים
-    Object.values(failureAnalysis).forEach(analysis => {
-      analysis.employees = Array.from(analysis.employees);
-      analysis.organizations = Array.from(analysis.organizations);
-    });
-
-    // סיכום סטטיסטי
-    const summary = {
-      totalTasksWithFailures: tasksWithFailures.length,
-      totalUniqueReasons: Object.keys(failureAnalysis).length,
-      topReasons: Object.values(failureAnalysis)
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5)
-        .map(item => ({ reason: item.reason, count: item.count })),
-      employeesWithMostFailures: Object.values(employeeFailures)
-        .sort((a, b) => b.totalFailures - a.totalFailures)
-        .slice(0, 5)
-        .map(item => ({ employee: item.employee, failures: item.totalFailures }))
-    };
-
-    res.json({
-      success: true,
-      data: {
-        byReason: Object.values(failureAnalysis),
-        byEmployee: Object.values(employeeFailures),
-        summary
-      },
+      data: employeeStats,
       appliedFilters: req.query
     });
 
   } catch (error) {
-    console.error('Error in getTasksByFailureReason:', error);
-    res.status(500).json({ success: false, message: 'שגיאה בשליפת דוח סיבות אי-ביצוע' });
+    console.error('Error in getEmployeePersonalStats:', error);
+    res.status(500).json({ success: false, message: 'שגיאה בשליפת סטטיסטיקות אישיות' });
   }
 };
 
-// 7. טעינת פילטר שמור למשתמש
-export const loadSavedFilter = async (req, res) => {
-  try {
-    const { screenType } = req.params;
-    const userId = req.user.id;
+// // אחסון פילטרים לפי משתמש
+// const userFilters = new Map();
 
-    const savedFilter = loadUserFilter(userId, screenType);
+// // פונקציית עזר לשמירת פילטר
+// const saveUserFilter = (userId, screenType, filters) => {
+//   const userKey = `${userId}_${screenType}`;
+//   userFilters.set(userKey, filters);
+// };
 
-    res.json({
-      success: true,
-      filter: savedFilter
-    });
+// // פונקציית עזר לטעינת פילטר
+// const loadUserFilter = (userId, screenType) => {
+//   const userKey = `${userId}_${screenType}`;
+//   return userFilters.get(userKey) || {};
+// };
 
-  } catch (error) {
-    console.error('Error in loadSavedFilter:', error);
-    res.status(500).json({ success: false, message: 'שגיאה בטעינת פילטר שמור' });
-  }
-};
+// // 7. טעינת פילטר שמור למשתמש
+// export const loadSavedFilter = async (req, res) => {
+//   try {
+//     const { screenType } = req.params;
+//     const userId = req.user.id;
 
-// 8. איפוס פילטר
-export const resetFilter = async (req, res) => {
-  try {
-    const { screenType } = req.params;
-    const userId = req.user.id;
+//     const savedFilter = loadUserFilter(userId, screenType);
 
-    const userKey = `${userId}_${screenType}`;
-    userFilters.delete(userKey);
+//     res.json({
+//       success: true,
+//       filter: savedFilter
+//     });
 
-    res.json({
-      success: true,
-      message: 'הפילטר אופס בהצלחה'
-    });
+//   } catch (error) {
+//     console.error('Error in loadSavedFilter:', error);
+//     res.status(500).json({ success: false, message: 'שגיאה בטעינת פילטר שמור' });
+//   }
+// };
 
-  } catch (error) {
-    console.error('Error in resetFilter:', error);
-    res.status(500).json({ success: false, message: 'שגיאה באיפוס פילטר' });
-  }
-};
+// // 8. איפוס פילטר
+// export const resetFilter = async (req, res) => {
+//   try {
+//     const { screenType } = req.params;
+//     const userId = req.user.id;
+
+//     const userKey = `${userId}_${screenType}`;
+//     userFilters.delete(userKey);
+
+//     res.json({
+//       success: true,
+//       message: 'הפילטר אופס בהצלחה'
+//     });
+
+//   } catch (error) {
+//     console.error('Error in resetFilter:', error);
+//     res.status(500).json({ success: false, message: 'שגיאה באיפוס פילטר' });
+//   }
+// };
 
