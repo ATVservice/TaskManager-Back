@@ -31,7 +31,8 @@ const taskSchema = new mongoose.Schema({
   followUp: { type: String },
   daysOpen: { type: Number, default: 0 },
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Association' ,required: true},
-  project: { type: String },
+  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' ,required: false},
+
   isRecurringInstance: { type: Boolean, default: false },
   isDeleted: { type: Boolean, default: false },
   deletedAt: { type: Date },

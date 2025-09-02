@@ -135,7 +135,9 @@ export const getTasks = async (req, res) => {
 
   const tasks = await Task.find(baseFilter)
     .populate('mainAssignee', 'userName')
-    .populate('organization', 'name');
+    .populate('organization', 'name')
+    .populate('project', 'name');
+
 
   const userPersonalDetails = await TaskAssigneeDetails.find({
     user: userId,
@@ -180,7 +182,9 @@ export const getMoreDetails = async (req, res) => {
     .select('assignees importance subImportance creator dueDate finalDeadline daysOpen createdAt project details mainAssignee statusNote')
     .populate('assignees', 'userName')
     .populate('creator', 'userName')
-    .populate('mainAssignee', 'userName');
+    .populate('mainAssignee', 'userName')
+    .populate('project', 'name');
+
 
   // אם לא נמצא, חפש ב-RecurringTask
   if (!task) {
@@ -188,7 +192,8 @@ export const getMoreDetails = async (req, res) => {
       .select('assignees importance subImportance creator daysOpen createdAt project details mainAssignee frequencyType frequencyDetails ')
       .populate('assignees', 'userName')
       .populate('creator', 'userName')
-      .populate('mainAssignee', 'userName');
+      .populate('mainAssignee', 'userName')
+      .populate('project', 'name');
   }
 
   if (!task) {

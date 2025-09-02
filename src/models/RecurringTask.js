@@ -22,7 +22,7 @@ const recurringTaskSchema = new mongoose.Schema({
     required: true
   },
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Association', required: true },
-  project: { type: String },
+  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: false },
   mainAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   assignees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }],
 
@@ -44,12 +44,12 @@ const recurringTaskSchema = new mongoose.Schema({
   deletedAt: { type: Date },
   deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   hiddenFrom: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-    updatesHistory: [{
-      date: Date,
-      user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-      status: String,
-      note: String
-    }]
+  updatesHistory: [{
+    date: Date,
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    status: String,
+    note: String
+  }]
 });
 
 export default mongoose.model('RecurringTask', recurringTaskSchema);

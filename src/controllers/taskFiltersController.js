@@ -50,6 +50,8 @@ export const getCompletedTasks = async (req, res) => {
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
+        .populate('project', 'name');
+
         // .populate('creator', 'userName');
 
 
@@ -58,6 +60,8 @@ export const getCompletedTasks = async (req, res) => {
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
+        .populate('project', 'name');
+
         // .populate('creator', 'userName');
 
 
@@ -88,6 +92,8 @@ export const getCancelledTasks = async (req, res) => {
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
+        .populate('project', 'name');
+
         // .populate('creator', 'userName');
 
 
@@ -96,6 +102,8 @@ export const getCancelledTasks = async (req, res) => {
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
+        .populate('project', 'name');
+
         // .populate('creator', 'userName');
 
 
@@ -127,6 +135,8 @@ export const getDrawerTasks = async (req, res) => {
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
+        .populate('project', 'name');
+
         // .populate('creator', 'userName');
 
 
@@ -135,6 +145,8 @@ export const getDrawerTasks = async (req, res) => {
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
+        .populate('project', 'name');
+
         // .populate('creator', 'userName');
 
 
@@ -155,6 +167,8 @@ export const getRecurringTasks = async (req, res) => {
         .populate('assignees', 'userName')
         .populate('mainAssignee', 'userName')
         .populate('organization', 'name')
+        .populate('project', 'name');
+
         // .populate('creator', 'userName');
 
 

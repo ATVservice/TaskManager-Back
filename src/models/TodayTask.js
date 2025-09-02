@@ -16,11 +16,11 @@ const todayTaskSchema = new mongoose.Schema({
     default: 'בתהליך',
     required: true,
   },
-  
+
 
   dueDate: { type: Date }, // רק עבור חד"פ
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Association', required: true },
-  project: { type: String },
+  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' ,required: false},
 
   mainAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   assignees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }],
