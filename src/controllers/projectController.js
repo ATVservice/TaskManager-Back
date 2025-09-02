@@ -3,8 +3,6 @@ import Project from "../models/Project.js";
 // הוספת פרויקט חדש
 export const addProject = async (req, res) => {
     const { name, isActive } = req.body;
-    console.log("%%%%%%%%%%%name", name);
-    console.log("%%%%%%%%%%%isActive", isActive);
 
     if (!name) {
         res.status(400);

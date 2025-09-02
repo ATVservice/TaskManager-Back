@@ -36,18 +36,17 @@ export const refreshTodayTasks = async () => {
     });
 
     // 3. שילוב למשימות להיום
-    const allToday = [
-        ...singleTasks.map(task => ({
-            ...task,
-            sourceTaskId: task._id,
-            isRecurringInstance: false
-        })),
-        ...todayRecurring.map(task => ({
-            ...task,
-            sourceTaskId: task._id,
-            isRecurringInstance: true
-        }))
-    ];
+    const sanitizeTask = (task, isRecurring) => ({
+        ...task,
+        sourceTaskId: task._id,
+        isRecurringInstance: isRecurring,
+        project: task.project && task.project !== "" ? task.project : undefined
+      });
+      
+      const allToday = [
+        ...singleTasks.map(task => sanitizeTask(task, false)),
+        ...todayRecurring.map(task => sanitizeTask(task, true))
+      ];
 
     await TodayTask.insertMany(allToday);
 };

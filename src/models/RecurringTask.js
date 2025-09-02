@@ -44,6 +44,12 @@ const recurringTaskSchema = new mongoose.Schema({
   deletedAt: { type: Date },
   deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   hiddenFrom: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  notes: [{
+    date: { type: Date, required: true },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    status: { type: String, enum: ['בתהליך', 'הושלם', 'מושהה', 'בטיפול', 'בוטלה'], required: true },
+    content: { type: String }
+  }],  
   updatesHistory: [{
     date: Date,
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

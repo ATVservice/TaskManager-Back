@@ -26,13 +26,22 @@ export const createTask = async (req, res) => {
     } = req.body.form;
     console.log("req.body.form", req.body.form);
 
-    if (importance !== 'מגירה') {
-      if (!dueDate || !finalDeadline) {
+
+    if (!isRecurring && importance !== 'מגירה') {
+      if (!dueDate && !finalDeadline) {
         res.status(400);
-        throw new Error('חובה להגדיר תאריכים למשימות שאינן מגירה');
+        throw new Error('חובה להזין תאריך יעד ותאריך סופי');
+      }
+      if (!dueDate) {
+        res.status(400);
+        throw new Error('חובה להזין תאריך יעד');
+      }
+      if (!finalDeadline) {
+        res.status(400);
+        throw new Error('חובה להזין תאריך סופי');
       }
     }
-    
+        
 
     const creatorId = req.user._id;
 
