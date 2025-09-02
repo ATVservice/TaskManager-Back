@@ -104,10 +104,8 @@ export const loadSavedFilter = async (req, res) => {
   }
 };
 
-/**
- * איפוס פילטר למשתמש
- * DELETE /api/filters/:screenType
- */
+
+ // איפוס פילטר למשתמש
 export const resetFilter = async (req, res) => {
   try {
     const { screenType } = req.params;
@@ -129,10 +127,7 @@ export const resetFilter = async (req, res) => {
   }
 };
 
-/**
- * קבלת כל הפילטרים של המשתמש
- * GET /api/filters/user/all
- */
+// קבלת כל הפילטרים של המשתמש
 export const getAllUserFilters = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -151,7 +146,6 @@ export const getAllUserFilters = async (req, res) => {
     });
   }
 };
-
 // פונקציית עזר לקבלת פרטי assignee
 const getAssigneeDetails = async (taskId, taskModel, userId = null) => {
   const query = { taskId, taskModel };
@@ -897,58 +891,4 @@ export const getEmployeePersonalStats = async (req, res) => {
     res.status(500).json({ success: false, message: 'שגיאה בשליפת סטטיסטיקות אישיות' });
   }
 };
-
-// // אחסון פילטרים לפי משתמש
-// const userFilters = new Map();
-
-// // פונקציית עזר לשמירת פילטר
-// const saveUserFilter = (userId, screenType, filters) => {
-//   const userKey = `${userId}_${screenType}`;
-//   userFilters.set(userKey, filters);
-// };
-
-// // פונקציית עזר לטעינת פילטר
-// const loadUserFilter = (userId, screenType) => {
-//   const userKey = `${userId}_${screenType}`;
-//   return userFilters.get(userKey) || {};
-// };
-
-// // 7. טעינת פילטר שמור למשתמש
-// export const loadSavedFilter = async (req, res) => {
-//   try {
-//     const { screenType } = req.params;
-//     const userId = req.user.id;
-
-//     const savedFilter = loadUserFilter(userId, screenType);
-
-//     res.json({
-//       success: true,
-//       filter: savedFilter
-//     });
-
-//   } catch (error) {
-//     console.error('Error in loadSavedFilter:', error);
-//     res.status(500).json({ success: false, message: 'שגיאה בטעינת פילטר שמור' });
-//   }
-// };
-
-// // 8. איפוס פילטר
-// export const resetFilter = async (req, res) => {
-//   try {
-//     const { screenType } = req.params;
-//     const userId = req.user.id;
-
-//     const userKey = `${userId}_${screenType}`;
-//     userFilters.delete(userKey);
-
-//     res.json({
-//       success: true,
-//       message: 'הפילטר אופס בהצלחה'
-//     });
-
-//   } catch (error) {
-//     console.error('Error in resetFilter:', error);
-//     res.status(500).json({ success: false, message: 'שגיאה באיפוס פילטר' });
-//   }
-// };
 
