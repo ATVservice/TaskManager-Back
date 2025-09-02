@@ -9,110 +9,110 @@ import TaskAssigneeDetails from '../models/TaskAssigneeDetails.js';
 
 
 export const createTask = async (req, res) => {
-    const {
-      title,
-      details,
-      dueDate,
-      finalDeadline,
-      importance,
-      subImportance,
-      assignees,
-      mainAssignee,
-      organization,
-      project,
-      isRecurring,
+  const {
+    title,
+    details,
+    dueDate,
+    finalDeadline,
+    importance,
+    subImportance,
+    assignees,
+    mainAssignee,
+    organization,
+    project,
+    isRecurring,
+    frequencyType,
+    frequencyDetails
+  } = req.body.form;
+  console.log("req.body.form", req.body.form);
+
+
+  if (!isRecurring && importance !== 'מגירה') {
+    if (!dueDate && !finalDeadline) {
+      res.status(400);
+      throw new Error('חובה להזין תאריך יעד ותאריך סופי');
+    }
+    if (!dueDate) {
+      res.status(400);
+      throw new Error('חובה להזין תאריך יעד');
+    }
+    if (!finalDeadline) {
+      res.status(400);
+      throw new Error('חובה להזין תאריך סופי');
+    }
+  }
+
+
+  const creatorId = req.user._id;
+
+  if (!Array.isArray(assignees) || assignees.length === 0) {
+    res.status(400);
+    throw new Error('שדה assignees חסר או לא תקין')
+  }
+
+  // שליפת המשתמשים לפי userName
+  const users = await User.find({ _id: { $in: assignees } });
+  if (users.length !== assignees.length) {
+    res.status(400);
+    throw new Error('יש אחראים שלא קיימים במערכת')
+  }
+
+  // מיפוי ל־_id
+  const assigneeIds = users.map(user => user._id);
+
+  // שליפת האחראי הראשי לפי userName
+  const mainAssigneeUser = users.find(user => user._id.toString() === mainAssignee);
+  if (!mainAssigneeUser) {
+    res.status(400);
+    throw new Error('האחראי הראשי חייב להיות מתוך רשימת האחראים')
+  }
+  if (importance !== 'מיידי') {
+
+    if (!subImportance || subImportance === '') {
+      delete req.body.form.subImportance;
+    }
+  }
+  else {
+    if (!subImportance || subImportance === '') {
+      res.status(400)
+      throw new Error('שדה subImportance חובה עבור משימות מיידיות');
+    }
+  }
+
+
+  const taskId = await getNextTaskId();
+
+  const baseTaskData = {
+    taskId,
+    creator: creatorId,
+    title,
+    details,
+    dueDate,
+    finalDeadline,
+    importance,
+    assignees: assigneeIds,
+    mainAssignee: mainAssigneeUser._id,
+    organization: new mongoose.Types.ObjectId(organization),
+    project,
+  };
+
+  if (importance === 'מיידי' && subImportance && subImportance !== '') {
+    baseTaskData.subImportance = subImportance;
+  }
+
+  if (isRecurring) {
+    const recurringTask = new RecurringTask({
+      ...baseTaskData,
       frequencyType,
-      frequencyDetails
-    } = req.body.form;
-    console.log("req.body.form", req.body.form);
+      frequencyDetails,
+    });
+    await recurringTask.save();
+  } else {
+    const task = new Task(baseTaskData);
+    await task.save();
+  }
 
-
-    if (!isRecurring && importance !== 'מגירה') {
-      if (!dueDate && !finalDeadline) {
-        res.status(400);
-        throw new Error('חובה להזין תאריך יעד ותאריך סופי');
-      }
-      if (!dueDate) {
-        res.status(400);
-        throw new Error('חובה להזין תאריך יעד');
-      }
-      if (!finalDeadline) {
-        res.status(400);
-        throw new Error('חובה להזין תאריך סופי');
-      }
-    }
-        
-
-    const creatorId = req.user._id;
-
-    if (!Array.isArray(assignees) || assignees.length === 0) {
-      res.status(400);
-      throw new Error('שדה assignees חסר או לא תקין')
-    }
-
-    // שליפת המשתמשים לפי userName
-    const users = await User.find({ _id: { $in: assignees } });
-    if (users.length !== assignees.length) {
-      res.status(400);
-      throw new Error('יש אחראים שלא קיימים במערכת')
-    }
-
-    // מיפוי ל־_id
-    const assigneeIds = users.map(user => user._id);
-
-    // שליפת האחראי הראשי לפי userName
-    const mainAssigneeUser = users.find(user => user._id.toString() === mainAssignee);
-    if (!mainAssigneeUser) {
-      res.status(400);
-      throw new Error('האחראי הראשי חייב להיות מתוך רשימת האחראים')
-    }
-    if (importance !== 'מיידי') {
-
-      if (!subImportance || subImportance === '') {
-        delete req.body.form.subImportance;
-      }
-    }
-    else {
-      if (!subImportance || subImportance === '') {
-        res.status(400)
-        throw new Error('שדה subImportance חובה עבור משימות מיידיות');
-      }
-    }
-
-
-    const taskId = await getNextTaskId();
-
-    const baseTaskData = {
-      taskId,
-      creator: creatorId,
-      title,
-      details,
-      dueDate,
-      finalDeadline,
-      importance,
-      assignees: assigneeIds,
-      mainAssignee: mainAssigneeUser._id,
-      organization: new mongoose.Types.ObjectId(organization),
-      project,
-    };
-
-    if (importance === 'מיידי' && subImportance && subImportance !== '') {
-      baseTaskData.subImportance = subImportance;
-    }
-
-    if (isRecurring) {
-      const recurringTask = new RecurringTask({
-        ...baseTaskData,
-        frequencyType,
-        frequencyDetails,
-      });
-      await recurringTask.save();
-    } else {
-      const task = new Task(baseTaskData);
-      await task.save();
-    }
-
-    return res.status(201).json({ message: 'משימה נוצרה בהצלחה' });
+  return res.status(201).json({ message: 'משימה נוצרה בהצלחה' });
 
 
 };
@@ -193,15 +193,18 @@ export const getMoreDetails = async (req, res) => {
     .populate('mainAssignee', 'userName')
     .populate('project', 'name');
 
-
+  let taskType = 'Task';
   // אם לא נמצא, חפש ב-RecurringTask
   if (!task) {
     task = await RecurringTask.findOne({ _id })
-      .select('assignees importance subImportance creator daysOpen createdAt project details mainAssignee frequencyType frequencyDetails ')
+      .select('assignees importance subImportance creator daysOpen createdAt project details mainAssignee frequencyType frequencyDetails statusNote notes')
       .populate('assignees', 'userName')
       .populate('creator', 'userName')
       .populate('mainAssignee', 'userName')
       .populate('project', 'name');
+
+    taskType = 'RecurringTask';
+
   }
 
   if (!task) {
@@ -226,8 +229,33 @@ export const getMoreDetails = async (req, res) => {
     }
   }
 
-  res.status(200).json(task);
+  let statusNote = '';
+  if (taskType !== 'RecurringTask') {
+    const lastDetail = await TaskAssigneeDetails.findOne({
+      taskId: task._id,
+      taskModel: taskType,
+      user: userId
+    }).sort({ createdAt: -1 });
+    if (lastDetail)
+      statusNote = lastDetail.statusNote || '';
+  } else {
+    if (taskType === 'RecurringTask') {
+      const notesByUser = (task.notes || []).filter(n => {
+        // console.log("note user type:", typeof n.user, n.user); // לדיבוג
+        return n.user.toString() === userIdStr;
+      });
+      console.log("notesByUser", notesByUser);
+      if (notesByUser.length) {
+        notesByUser.sort((a, b) => b.date - a.date); // מהחדש לישן
+        statusNote = notesByUser[0].content || '';
+      }
+    }
+  }
 
+  res.status(200).json({
+    ...task.toObject(),
+    statusNote
+  });
 };
 
 export const duplicateTask = async (req, res) => {

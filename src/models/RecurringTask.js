@@ -21,6 +21,8 @@ const recurringTaskSchema = new mongoose.Schema({
     default: 'בתהליך',
     required: true
   },
+  statusNote: { type: String , require:false},
+
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Association', required: true },
   project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: false },
   mainAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
