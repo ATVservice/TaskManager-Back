@@ -1,6 +1,7 @@
 import TodayTask from '../models/TodayTask.js';
 import Task from '../models/Task.js';
 import RecurringTask from '../models/RecurringTask.js';
+import TaskAssigneeDetails from '../models/TaskAssigneeDetails.js';
 import dayjs from 'dayjs';
 
 export const refreshTodayTasks = async () => {
@@ -40,7 +41,8 @@ export const refreshTodayTasks = async () => {
         ...task,
         sourceTaskId: task._id,
         isRecurringInstance: isRecurring,
-        project: task.project && task.project !== "" ? task.project : undefined
+        project: task.project && task.project !== "" ? task.project : null,
+        taskModel: isRecurring ? 'RecurringTask' : 'Task', 
       });
       
       const allToday = [
@@ -51,39 +53,87 @@ export const refreshTodayTasks = async () => {
     await TodayTask.insertMany(allToday);
 };
 
-export const getTodayTasks = async (req, res) => {
-    const userId = req.user._id;
-    const isAdmin = req.user.role === 'מנהל';
 
+export const getTodayTasks = async (req, res) => {
+  try {
+    const userIdStr = String(req.user._id);
+    const isAdmin = req.user.role === 'מנהל';
     const { isRecurringInstance } = req.query;
 
     const filter = {};
-
     if (!isAdmin) {
-        filter.$or = [
-            { mainAssignee: userId },
-            { assignees: userId },
-            { creator: userId }
-        ];
+      filter.$or = [
+        { mainAssignee: req.user._id },
+        { assignees: req.user._id },
+        { creator: req.user._id },
+      ];
     }
-
-    if (isRecurringInstance === 'true') {
-        filter.isRecurringInstance = true;
-    } else if (isRecurringInstance === 'false') {
-        filter.isRecurringInstance = false;
-    }
+    if (isRecurringInstance === 'true') filter.isRecurringInstance = true;
+    else if (isRecurringInstance === 'false') filter.isRecurringInstance = false;
 
     const tasks = await TodayTask.find(filter)
-        // .select('_id taskId title organization mainAssignee status')
-        .populate('assignees', 'userName')
-        .populate('mainAssignee', 'userName')
-        .populate('organization', 'name')
-        .populate('creator', 'userName');
+      .populate('assignees', 'userName')
+      .populate('mainAssignee', 'userName')
+      .populate('organization', 'name')
+      .populate('creator', 'userName')
+      .populate('project', 'name');
 
+    const updated = await Promise.all(
+      tasks.map(async (doc) => {
+        const task = doc.toObject();
 
-    res.status(200).json(tasks);
+        // --- מקרה 1: משימה קבועה ---
+        if (task.taskModel === 'RecurringTask' && task.sourceTaskId) {
+          const recurring = await RecurringTask
+            .findById(task.sourceTaskId)
+            .select('notes');
+
+          const notes = Array.isArray(recurring?.notes) ? recurring.notes : [];
+          const userNotes = notes.filter(n => n.user && String(n.user) === userIdStr);
+
+          if (userNotes.length > 0) {
+            const last = userNotes.sort(
+              (a, b) => new Date(b.date) - new Date(a.date)
+            )[0];
+            if (last?.status) {
+              task.status = last.status;
+            }
+          }
+        }
+
+        // --- מקרה 2: משימה רגילה ---
+        if (task.taskModel === 'Task' && task.sourceTaskId) {
+          // בדיקה ב־TaskAssigneeDetails
+          const tad = await TaskAssigneeDetails.findOne({
+            taskId: task.sourceTaskId,
+            taskModel: 'Task',
+            user: req.user._id,
+          });
+
+          if (tad) {
+            task.status = tad.status;
+            task.statusNote = tad.statusNote || '';
+          } else {
+            // fallback: מתוך Task המקורי
+            const originalTask = await Task.findById(task.sourceTaskId).select('status statusNote');
+            if (originalTask) {
+              task.status = originalTask.status;
+              task.statusNote = originalTask.statusNote || '';
+            }
+          }
+        }
+
+        return task;
+      })
+    );
+
+    res.status(200).json(updated);
+  } catch (err) {
+    console.error('getTodayTasks error:', err);
+    res.status(500).json({ error: 'שגיאה בשליפת משימות להיום' });
+  }
 };
-
+  
 // חישוב שדה daysOpen
 export const updateDaysOpen = async() => {
     try {

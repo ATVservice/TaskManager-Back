@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const todayTaskSchema = new mongoose.Schema({
   taskId: { type: Number, required: true }, // מספר משימה פנימי (גם לקבועות וגם לחד"פ)
   sourceTaskId: { type: mongoose.Schema.Types.ObjectId, required: true }, // הפניה למשימה המקורית - RecurringTask או Task
-  // taskModel: { type: String, enum: ['Task', 'RecurringTask'], required: true },
+  taskModel: { type: String, enum: ['Task', 'RecurringTask'], required: true },
   isRecurringInstance: { type: Boolean, default: false }, // אם נוצר ממשימה קבועה
   creator: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // מקים המשימה
 

@@ -180,7 +180,6 @@ export const getTasks = async (req, res) => {
   res.status(200).json(tasksWithPersonal);
 };
 
-
 export const getMoreDetails = async (req, res) => {
   const userId = req.user._id;
   const isAdmin = req.user.role === 'מנהל';
