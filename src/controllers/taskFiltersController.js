@@ -69,7 +69,6 @@ export const getCompletedTasks = async (req, res) => {
 
     res.json(all);
 };
-
 // בוטלו
 export const getCancelledTasks = async (req, res) => {
     const userId = req.user._id;
@@ -111,48 +110,19 @@ export const getCancelledTasks = async (req, res) => {
 
     res.json(all);
 };
-
 // מגירה
 export const getDrawerTasks = async (req, res) => {
-    const userId = req.user._id;
-    const isAdmin = req.user.role === 'מנהל';
-
     const filter = {
         ...getBaseFilter(req.user),
         importance: 'מגירה',
     };
-
-    const baseRecurringFilter = {
-        importance: 'מגירה',
-        isRecurringInstance: true,
-        ...getBaseTodayFilter(req.user)
-    };
-
-
-
     const singleTasks = await Task.find(filter)
-        // .select('_id taskId title organization mainAssignee status')
         .populate('mainAssignee', 'userName')
         .populate('assignees', 'userName')
         .populate('organization', 'name')
         .populate('project', 'name');
 
-        // .populate('creator', 'userName');
-
-
-    const recurringToday = await TodayTask.find(baseRecurringFilter)
-        .select('_id taskId title organization mainAssignee status')
-        .populate('mainAssignee', 'userName')
-        .populate('assignees', 'userName')
-        .populate('organization', 'name')
-        .populate('project', 'name');
-
-        // .populate('creator', 'userName');
-
-
-    const all = [...singleTasks, ...recurringToday];
-
-    res.json(all);
+    res.json(singleTasks);
 };
 export const getRecurringTasks = async (req, res) => {
     const userId = req.user._id;

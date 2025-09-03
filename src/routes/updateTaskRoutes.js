@@ -9,6 +9,7 @@ const router = express.Router();
 
 
 router.put('/updateTask/:taskId', authMiddleware, asyncHandler(updateTask));
+router.put('/updateRecurringTask/:taskId', authMiddleware, asyncHandler(updateRecurringTask));
 router.get('/history/:taskId', authMiddleware, asyncHandler(getTaskHistory));
 
 

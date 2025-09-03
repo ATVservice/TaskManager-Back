@@ -74,7 +74,7 @@ export const updateTask = async (req, res) => {
       if (Array.isArray(v)) return JSON.stringify(v.map(x => normalizeForCompare(x)).sort());
       if (typeof v === 'object') {
         if (v._id) return String(v._id);
-        try { return JSON.stringify(v); } catch(e) { return String(v); }
+        try { return JSON.stringify(v); } catch (e) { return String(v); }
       }
       return String(v);
     };
@@ -219,6 +219,45 @@ export const updateTask = async (req, res) => {
         });
       }
     }
+    const dateFields = ['dueDate', 'finalDeadline'];
+    let dateChanged = false;
+
+    for (const f of dateFields) {
+      const oldVal = task.get(f);
+      const newVal = updates[f];
+      if (newVal && !valuesEqual(oldVal, newVal)) {
+        dateChanged = true;
+        break;
+      }
+    }
+
+    if (dateChanged) {
+      const failureReason = updates.failureReason;
+      if (!failureReason || (!failureReason.option && !failureReason.customText)) {
+        res.status(400);
+        throw new Error('חובה לספק סיבת שינוי כאשר התאריך משתנה');
+      }
+      if (failureReason.option === 'אחר' && (!failureReason.customText || failureReason.customText.trim() === '')) {
+        res.status(400);
+        throw new Error('חובה למלא פירוט כאשר הסיבה היא "אחר"');
+      }
+
+      task.set('failureReason', failureReason);
+
+      const oldFailure = task.get('failureReason');
+      const newFailure = updates.failureReason;
+
+      if (newFailure && !valuesEqual(oldFailure, newFailure)) {
+        task.set('failureReason', newFailure);
+        changes.push({
+          field: 'failureReason',
+          before: oldFailure ? (oldFailure.option === 'אחר' ? oldFailure.customText : oldFailure.option) : null,
+          after: newFailure.option === 'אחר' ? newFailure.customText : newFailure.option
+        });
+      }
+
+    }
+
 
     // ---- NEW: if importance changed and is no longer "מיידי", remove subImportance ----
     // We do this here (before save) so the DB won't keep the old subImportance value.
@@ -256,6 +295,28 @@ export const updateTask = async (req, res) => {
       throw new Error('אין שינויים לשמירה.');
     }
 
+    await task.save();
+
+    // --- existing logic של TodayTask ---
+    if (task.dueDate) {
+      const today = dayjs().startOf('day');
+      const endOfToday = dayjs().endOf('day');
+
+      if (dayjs(task.dueDate).isBetween(today, endOfToday, null, '[]')) {
+        const exists = await TodayTask.findOne({ sourceTaskId: task._id, isRecurringInstance: false });
+        if (!exists) {
+          await TodayTask.create({
+            ...task.toObject(),
+            sourceTaskId: task._id,
+            taskModel: "Task",
+            isRecurringInstance: false
+          });
+        }
+      } else {
+        await TodayTask.deleteOne({ sourceTaskId: task._id, isRecurringInstance: false });
+      }
+    }
+
     // update metadata
     task.updatedAt = new Date();
     task.updatesHistory.push({
@@ -268,27 +329,28 @@ export const updateTask = async (req, res) => {
     // save and populate
     await task.save();
 
-// אם עודכן תאריך היעד להיום אז זה יתווסיף למשימות להיום
-//וכן להיפך, אם נדחה התאריך הוא יוסר ממשימות להיום 
-if (task.dueDate) {
-  const today = dayjs().startOf('day');
-  const endOfToday = dayjs().endOf('day');
+    // אם עודכן תאריך היעד להיום אז זה יתווסיף למשימות להיום
+    //וכן להיפך, אם נדחה התאריך הוא יוסר ממשימות להיום 
+    if (task.dueDate) {
+      const today = dayjs().startOf('day');
+      const endOfToday = dayjs().endOf('day');
 
-  if (dayjs(task.dueDate).isBetween(today, endOfToday, null, '[]')) {
-    const exists = await TodayTask.findOne({ sourceTaskId: task._id, isRecurringInstance: false });
-    if (!exists) {
-      await TodayTask.create({
-        ...task.toObject(),
-        sourceTaskId: task._id,
-        isRecurringInstance: false
-      });
-      console.log(`✅ Task ${task._id} added to TodayTask`);
+      if (dayjs(task.dueDate).isBetween(today, endOfToday, null, '[]')) {
+        const exists = await TodayTask.findOne({ sourceTaskId: task._id, isRecurringInstance: false });
+        if (!exists) {
+          await TodayTask.create({
+            ...task.toObject(),
+            sourceTaskId: task._id,
+            taskModel: "Task",
+            isRecurringInstance: false
+          });
+          console.log(`✅ Task ${task._id} added to TodayTask`);
+        }
+      } else {
+        // אם התאריך כבר לא היום – למחוק מהטבלה (כדי לא להציג בטעות)
+        await TodayTask.deleteOne({ sourceTaskId: task._id, isRecurringInstance: false });
+      }
     }
-  } else {
-    // אם התאריך כבר לא היום – למחוק מהטבלה (כדי לא להציג בטעות)
-    await TodayTask.deleteOne({ sourceTaskId: task._id, isRecurringInstance: false });
-  }
-}
 
 
 
