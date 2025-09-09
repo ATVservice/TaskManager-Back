@@ -17,8 +17,8 @@ const recurringTaskSchema = new mongoose.Schema({
   // קשור שיהיה פה סטטוס? לבדוק את זה!
   status: {
     type: String,
-    enum: ['בתהליך', 'הושלם', 'מושהה', 'בטיפול', 'בוטלה'],
-    default: 'בתהליך',
+    enum: ['לביצוע', 'הושלם', 'בטיפול', 'בוטלה'],
+    default: 'לביצוע',
     required: true
   },
   statusNote: { type: String , require:false},
@@ -49,7 +49,7 @@ const recurringTaskSchema = new mongoose.Schema({
   notes: [{
     date: { type: Date, required: true },
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    status: { type: String, enum: ['בתהליך', 'הושלם', 'מושהה', 'בטיפול', 'בוטלה'], required: true },
+    status: { type: String, enum: ['לביצוע', 'הושלם', 'בטיפול', 'בוטלה'], required: true },
     content: { type: String }
   }],  
   updatesHistory: [{

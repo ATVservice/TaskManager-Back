@@ -10,7 +10,9 @@ export const getTaskHistory = async (req, res) => {
         const user = req.user;
 
         const { model } = req.query; 
-        const Model = model === 'TodayTask' ? TodayTask : model === 'RecurringTask' ? RecurringTask : Task;
+        const Model = model === 'TodayTask' ? TodayTask : model === 'RecurringTask' ? RecurringTask :  model === 'Task' ? Task : Task;
+
+        console.log("MModel",Model)
 
         const task = await Model.findById(taskId);
 

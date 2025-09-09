@@ -13,8 +13,8 @@ const todayTaskSchema = new mongoose.Schema({
   subImportance: { type: String, enum: ['דחוף', 'ממוספר', 'בהקדם האפשרי', 'לפי תאריך'] },
   status: {
     type: String,
-    enum: ['בתהליך', 'הושלם', 'מושהה', 'בטיפול', 'בוטלה'],
-    default: 'בתהליך',
+    enum: ['לביצוע', 'הושלם', 'בטיפול', 'בוטלה'],
+    default: 'לביצוע',
     required: true,
   },
 

@@ -5,7 +5,7 @@ const taskAssigneeDetailsSchema = new mongoose.Schema({
   taskModel: { type: String, required: true, enum: ['Task', 'TodayTask', 'RecurringTask'] },
 
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  status: { type: String, enum: ['בתהליך', 'הושלם', 'מושהה', 'בטיפול', 'בוטלה'], default: 'בתהליך' },
+  status: { type: String, enum: ['לביצוע', 'הושלם', 'בטיפול', 'בוטלה'], default: 'לביצוע' },
   statusNote: { type: String },
   hidden: { type: Boolean, default: false },
 }, { timestamps: true });

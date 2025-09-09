@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import dayjs from 'dayjs';
 import Goal from '../models/Goal.js';
 
+
 const fetchTasksForUserRange = async (Model, targetId, startDate, endDate) => {
     const tasks = await Model.find({
         assignees: targetId,

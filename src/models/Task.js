@@ -21,8 +21,8 @@ const taskSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['בתהליך', 'הושלם', 'מושהה', 'בטיפול', 'בוטלה'],
-    default: 'בתהליך',
+    enum: ['לביצוע', 'הושלם', 'בטיפול', 'בוטלה'],
+    default: 'לביצוע',
     required: true
   },
   statusNote: { type: String, default: "" },

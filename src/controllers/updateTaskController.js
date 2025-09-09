@@ -11,18 +11,67 @@ import isBetween from 'dayjs/plugin/isBetween.js';
 
 dayjs.extend(isBetween);
 
+// בודק האם לשנות לכולם להושלם
 async function checkAndMarkTaskCompleted(taskId) {
+  const task = await Task.findById(taskId);
+  if (!task) return;
+
   const details = await TaskAssigneeDetails.find({ taskId, taskModel: 'Task' });
-  if (details.length > 0 && details.every(d => d.status === 'הושלם')) {
-    await Task.findByIdAndUpdate(taskId, { status: 'הושלם' });
+
+  // רשימת משניים של המשימה
+  const secondaryIds = task.assignees.map(a => String(a)).filter(a => String(a) !== String(task.mainAssignee));
+
+  if (secondaryIds.length > 0) {
+    // לוקח רק את ה-TaskAssigneeDetails של המשניים
+    const secondaryDetails = details.filter(d => secondaryIds.includes(String(d.user)));
+
+    // אם **אין רשומות לכל המשניים** אז לא משנה סטטוס גלובלי
+    if (secondaryDetails.length !== secondaryIds.length) return;
+
+    // אם כל המשניים סיימו
+    const allSecondaryCompleted = secondaryDetails.every(d => d.status === 'הושלם');
+    if (allSecondaryCompleted) {
+      await Task.findByIdAndUpdate(taskId, { status: 'הושלם' });
+    }
   }
+};
+// בודק האם לבטל את הושלם מהסטטוס הכללי
+async function checkAndUnsetTaskCompletedIfNeeded(taskId, changedUserId, newStatus) {
+  if (newStatus === 'הושלם') return; // לא משנה אם משלים, רק כשהופך לסטטוס אחר
+
+  const task = await Task.findById(taskId);
+  if (!task) return;
+
+  // אם הסטטוס הכללי כבר לא "הושלם", אין מה לעשות
+  if (task.status !== 'הושלם') return;
+
+  const details = await TaskAssigneeDetails.find({ taskId, taskModel: 'Task' });
+
+  // רשימת משניים
+  const secondaryIds = task.assignees.map(a => String(a)).filter(a => String(a) !== String(task.mainAssignee));
+
+  if (secondaryIds.length === 0) return;
+
+  // לוקח רק את ה-TaskAssigneeDetails של המשניים
+  const secondaryDetails = details.filter(d => secondaryIds.includes(String(d.user)));
+
+  // אם לא כל המשניים קיימים ברשומות, לא נגע בסטטוס
+  if (secondaryDetails.length !== secondaryIds.length) return;
+
+  // בדיקה: אם המשתמש ששינה סטטוס היה חלק מהמשניים והסטטוס שלו כבר לא "הושלם"
+  const changedDetail = secondaryDetails.find(d => String(d.user) === String(changedUserId));
+  if (!changedDetail) return;
+
+  // בטל סטטוס גלובלי
+  await Task.findByIdAndUpdate(taskId, { status: 'בטיפול' }); // או סטטוס ברירת מחדל שמתאים לך
 }
+
 
 export const updateTask = async (req, res) => {
   try {
     const { taskId } = req.params;
     const user = req.user;
-    const allowedStatuses = ['בתהליך', 'הושלם', 'מושהה', 'בטיפול', 'בוטלה'];
+    const allowedStatuses = ['לביצוע', 'הושלם', 'בטיפול', 'בוטלה'];
 
     // ---------- parse body (support preparedForm wrapper) ----------
     const rawBody = req.body || {};
@@ -141,6 +190,10 @@ export const updateTask = async (req, res) => {
         personalUpdates,
         { upsert: true, new: true }
       );
+      if (personalUpdates.status && personalUpdates.status !== previous?.status) {
+        await checkAndUnsetTaskCompletedIfNeeded(taskId, user._id, personalUpdates.status);
+      }
+      
 
       await checkAndMarkTaskCompleted(taskId);
 

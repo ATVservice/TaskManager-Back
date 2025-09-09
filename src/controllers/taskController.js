@@ -93,7 +93,7 @@ export const createTask = async (req, res) => {
     assignees: assigneeIds,
     mainAssignee: mainAssigneeUser._id,
     organization: new mongoose.Types.ObjectId(organization),
-    project,
+    project: project ? new mongoose.Types.ObjectId(project) : null,
   };
 
   if (importance === 'מיידי' && subImportance && subImportance !== '') {
@@ -116,7 +116,6 @@ export const createTask = async (req, res) => {
 
 
 };
-
 
 export const getTasks = async (req, res) => {
   const userId = req.user._id;
