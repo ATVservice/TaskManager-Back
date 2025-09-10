@@ -125,6 +125,7 @@ export const getTasks = async (req, res) => {
 
   let baseFilter = {
     isDeleted: false,
+    status: { $ne: "בוטלה" }, 
     dueDate: { $gt: today },
     $expr: {
       $not: {
