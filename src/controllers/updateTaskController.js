@@ -4,6 +4,7 @@ import TaskHistory from '../models/TaskHistory.js';
 import TaskAssigneeDetails from '../models/TaskAssigneeDetails.js';
 import User from '../models/User.js';
 import Association from '../models/Association.js';
+import Project from '../models/Project.js';
 import { getTaskPermissionLevel } from '../utils/taskPermissions.js';
 import TodayTask from '../models/TodayTask.js';
 import dayjs from 'dayjs';
@@ -193,14 +194,14 @@ export const updateTask = async (req, res) => {
       if (personalUpdates.status && personalUpdates.status !== previous?.status) {
         await checkAndUnsetTaskCompletedIfNeeded(taskId, user._id, personalUpdates.status);
       }
-      
+
 
       await checkAndMarkTaskCompleted(taskId);
 
       const history = Object.entries(personalUpdates).map(([field, newVal]) => ({
         taskId,
         user: user._id,
-        field: `personal.${field}`,
+        field: field,
         before: previous?.[field] ?? null,
         after: newVal,
         date: new Date()
@@ -264,12 +265,38 @@ export const updateTask = async (req, res) => {
         } else {
           task.set(field, saveVal);
         }
+        const fieldNamesMap = {
+          title: 'כותרת',
+          details: 'פרטים',
+          dueDate: 'תאריך יעד',
+          finalDeadline: 'תאריך סופי',
+          importance: 'חשיבות',
+          subImportance: 'תת דירוג',
+          status: 'סטטוס',
+          statusNote:"הערת סטטוס",
+          mainAssignee: 'אחראי ראשי',
+          assignees: 'אחראיים',
+          project: 'פרויקט',
+          organization: 'עמותה',
+          frequencyDetails: 'פרטי תדירות',
+          frequencyType: 'סוג תדירות',
+          failureReason: 'סיבת אי ביצוע'
+        };
 
-        changes.push({
-          field,
-          before: stringifyForHistory(oldVal),
-          after: stringifyForHistory(saveVal)
-        });
+        if (field === 'failureReason') {
+          // טיפול מותאם אישית לשדה failureReason
+          changes.push({
+            field: fieldNamesMap[field] || field,
+            before: oldVal ? (oldVal.option === 'אחר' ? oldVal.customText : oldVal.option) : null,
+            after: saveVal ? (saveVal.option === 'אחר' ? saveVal.customText : saveVal.option) : null
+          });
+        } else {
+          changes.push({
+            field: fieldNamesMap[field] || field,
+            before: stringifyForHistory(oldVal),
+            after: stringifyForHistory(saveVal)
+          });
+        }
       }
     }
     const dateFields = ['dueDate', 'finalDeadline'];
@@ -297,23 +324,8 @@ export const updateTask = async (req, res) => {
 
       task.set('failureReason', failureReason);
 
-      const oldFailure = task.get('failureReason');
-      const newFailure = updates.failureReason;
-
-      if (newFailure && !valuesEqual(oldFailure, newFailure)) {
-        task.set('failureReason', newFailure);
-        changes.push({
-          field: 'failureReason',
-          before: oldFailure ? (oldFailure.option === 'אחר' ? oldFailure.customText : oldFailure.option) : null,
-          after: newFailure.option === 'אחר' ? newFailure.customText : newFailure.option
-        });
-      }
-
     }
 
-
-    // ---- NEW: if importance changed and is no longer "מיידי", remove subImportance ----
-    // We do this here (before save) so the DB won't keep the old subImportance value.
     const importanceChange = changes.find(c => c.field === 'importance');
     if (importanceChange) {
       const newImportance = importanceChange.after; // string or null
@@ -419,14 +431,15 @@ export const updateTask = async (req, res) => {
     // אסוף כל ה-ids שצריך לרזולב
     const userIdsToResolve = new Set();
     const assocIdsToResolve = new Set();
+    const projectIdsToResolve = new Set();
 
     for (const c of changes) {
       // הערכים before/after ב-changes הם סטרינגים שיצרנו בעזרת stringifyForHistory
       // נזהה מצבים רלוונטיים לפי שם השדה
-      if (c.field === 'mainAssignee') {
+      if (c.field === 'אחראי ראשי') {
         if (c.before) userIdsToResolve.add(c.before);
         if (c.after) userIdsToResolve.add(c.after);
-      } else if (c.field === 'assignees') {
+      } else if (c.field === 'אחראיים') {
         // assignees נשמרו כסטרינג של JSON או כמחרוזת; ננסה לפענח
         if (c.before) {
           try {
@@ -446,9 +459,13 @@ export const updateTask = async (req, res) => {
             userIdsToResolve.add(c.after);
           }
         }
-      } else if (c.field === 'organization') {
+      } else if (c.field === 'עמותה') {
         if (c.before) assocIdsToResolve.add(c.before);
         if (c.after) assocIdsToResolve.add(c.after);
+      }
+      else if (c.field === 'פרויקט') { // שדה project (שם עברי)
+        if (c.before) projectIdsToResolve.add(c.before);
+        if (c.after) projectIdsToResolve.add(c.after);
       }
     }
 
@@ -456,23 +473,36 @@ export const updateTask = async (req, res) => {
     const userIds = Array.from(userIdsToResolve)
       .map(id => String(id))
       .filter(id => mongoose.isValidObjectId(id));
+
     const assocIds = Array.from(assocIdsToResolve)
       .map(id => String(id))
       .filter(id => mongoose.isValidObjectId(id));
 
-    // בקשות DB מקבילות לקבלת שמות
-    const [usersMapArr, assocsMapArr] = await Promise.all([
+    const projectIds = Array.from(projectIdsToResolve)
+      .map(id => String(id))
+      .filter(id => id && mongoose.isValidObjectId(id));
+
+       console.log('IDs to resolve:', { userIds, assocIds, projectIds }); // דיבאג
+
+    // בקשות DB מקבילות לקבלת שמות - הוסף גם Project
+    const [usersMapArr, assocsMapArr, projectsMapArr] = await Promise.all([
       userIds.length ? User.find({ _id: { $in: userIds } }).select('_id userName').lean() : [],
-      assocIds.length ? Association.find({ _id: { $in: assocIds } }).select('_id name').lean() : []
+      assocIds.length ? Association.find({ _id: { $in: assocIds } }).select('_id name').lean() : [],
+      projectIds.length ? Project.find({ _id: { $in: projectIds } }).select('_id name').lean() : []
     ]);
+
+    console.log("Retrieved data:", { usersMapArr, assocsMapArr, projectsMapArr }); 
+
 
     // בוני מיפוי id -> name
     const userNameMap = new Map(usersMapArr.map(u => [String(u._id), u.userName]));
     const assocNameMap = new Map(assocsMapArr.map(a => [String(a._id), a.name]));
+    const projectNameMap = new Map(projectsMapArr.map(p => [String(p._id), p.name]));
+
 
     // פונקציה עזר להמיר ערכים לייצוג קריא
     const humanizeValue = (val) => {
-      if (val === undefined || val === null) return null;
+      if (val === undefined || val === null || val ==='') return null;
 
       // אם זה מחרוזת שנראית כמו JSON של מערך
       if (typeof val === 'string') {
@@ -488,6 +518,8 @@ export const updateTask = async (req, res) => {
         // יכול להיות שזה id של user או assoc
         if (userNameMap.has(val)) return userNameMap.get(val);
         if (assocNameMap.has(val)) return assocNameMap.get(val);
+        if (projectNameMap.has(val)) return projectNameMap.get(val); // הוסף את זה
+
         return val;
       }
 
@@ -497,11 +529,13 @@ export const updateTask = async (req, res) => {
           const idStr = String(val._id);
           if (userNameMap.has(idStr)) return userNameMap.get(idStr);
           if (assocNameMap.has(idStr)) return assocNameMap.get(idStr);
+          if (projectNameMap.has(idStr)) return projectNameMap.get(idStr); 
+
           if (val.name) return val.name;
           if (val.userName) return val.userName;
           return idStr;
         }
-        // fallback: stringify
+
         try { return JSON.stringify(val); } catch (e) { return String(val); }
       }
 

@@ -21,7 +21,7 @@ export const getTaskHistory = async (req, res) => {
 
         const permission = getTaskPermissionLevel(task, user);
         if (permission === 'none') {
-            return res.status(403).json({ message: 'אין לך הרשאה לעדכן משימה זו' });
+            return res.status(403).json({ message: 'אין לך הרשאה לראות משימה זו' });
           }
           
 
@@ -39,9 +39,6 @@ export const getTaskHistory = async (req, res) => {
         const history = await TaskHistory.find(query)
             .sort({ date: -1 })
             .populate('user', 'userName')
-
-            
-
 
         res.json({ history });
 

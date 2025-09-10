@@ -2046,7 +2046,6 @@ const processRegularTasksByDays = async (tasks, dateRange, userId) => {
       }
       
       }
-
   }
 
   return processedTasks;

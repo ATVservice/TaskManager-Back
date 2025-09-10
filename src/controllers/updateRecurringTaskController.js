@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
 import RecurringTask from '../models/RecurringTask.js';
+import TaskRecurringHistory from '../models/TaskRecurringHistory.js'; // הוסף import
 import User from '../models/User.js';
 import Association from '../models/Association.js';
+import Project from '../models/Project.js'; // הוסף import
 import { getTaskPermissionLevel } from '../utils/taskPermissions.js';
 
-
- // בדיקות בסיסיות ללוגיקת תדירות
-
+// בדיקות בסיסיות ללוגיקת תדירות
 function validateFrequency(frequencyType, details) {
   if (!frequencyType) return 'חובה לבחור סוג תדירות';
   switch (frequencyType) {
@@ -38,6 +38,7 @@ function validateFrequency(frequencyType, details) {
       return 'סוג תדירות לא חוקי';
   }
 }
+
 export const updateRecurringTask = async (req, res) => {
   try {
     const { taskId } = req.params;
@@ -46,6 +47,8 @@ export const updateRecurringTask = async (req, res) => {
     // ---------- parse body ----------
     const rawBody = req.body || {};
     const updates = rawBody.preparedForm ? rawBody.preparedForm : rawBody;
+
+    console.log('updateRecurringTask debug: received updates:', JSON.stringify(updates));
 
     // ---------- fetch recurring task ----------
     const task = await RecurringTask.findById(taskId);
@@ -107,21 +110,44 @@ export const updateRecurringTask = async (req, res) => {
     const changes = [];
 
     for (const [field, incomingValRaw] of Object.entries(updates)) {
-      // ❌ לא נוגעים ב־status / notes
-      if (field === 'status' || field === 'notes') continue;
+      // ❌ לא נוגעים ב־status / notes - הם נשמרים ב-notes/updatesHistory
+      if (field === 'status' || field === 'statusNote') continue;
 
       let saveVal = incomingValRaw;
       if (field === 'organization' || field === 'mainAssignee') {
         saveVal = toObjectId(incomingValRaw);
       } else if (field === 'assignees' && Array.isArray(incomingValRaw)) {
         saveVal = toObjectId(incomingValRaw);
+      } else if (field === 'project') {
+        saveVal = toObjectId(incomingValRaw);
       }
 
       const oldVal = task.get(field);
+      console.log(`Field "${field}": old=${stringifyForHistory(oldVal)}, incoming=${JSON.stringify(incomingValRaw)}, saveVal=${stringifyForHistory(saveVal)}`);
+
       if (!valuesEqual(oldVal, saveVal)) {
         task.set(field, saveVal);
+        
+        // מיפוי שמות השדות לעברית
+        const fieldNamesMap = {
+          title: 'כותרת',
+          details: 'פרטים',
+          importance: 'חשיבות',
+          subImportance: 'תת דירוג',
+          mainAssignee: 'אחראי ראשי',
+          status:"סטטוס",
+          statusNote:"הערת סטטוס",
+          assignees: 'אחראיים',
+          project: 'פרויקט',
+          organization: 'עמותה',
+          frequencyType: 'סוג תדירות',
+          frequencyDetails: 'פרטי תדירות'
+        };
+
+
+
         changes.push({
-          field,
+          field: fieldNamesMap[field] || field,
           before: stringifyForHistory(oldVal),
           after: stringifyForHistory(saveVal)
         });
@@ -136,6 +162,33 @@ export const updateRecurringTask = async (req, res) => {
       if (freqError) {
         res.status(400);
         throw new Error(freqError);
+      }
+    }
+
+    // ---------- בדיקת subImportance כמו במשימות רגילות ----------
+    const importanceChange = changes.find(c => c.field === 'חשיבות');
+    if (importanceChange) {
+      const newImportance = importanceChange.after;
+      const newImportanceStr = newImportance === null ? null : String(newImportance);
+      if (newImportanceStr !== 'מיידי') {
+        const existingSub = task.get('subImportance');
+        if (existingSub !== undefined && existingSub !== null && existingSub !== '') {
+          changes.push({
+            field: 'תת דירוג',
+            before: stringifyForHistory(existingSub),
+            after: null
+          });
+
+          try {
+            task.set('subImportance', undefined);
+            if (Object.prototype.hasOwnProperty.call(task, 'subImportance')) {
+              delete task.subImportance;
+            }
+            task.markModified && task.markModified('subImportance');
+          } catch (e) {
+            console.error('Failed to unset subImportance on recurring task:', e);
+          }
+        }
       }
     }
 
@@ -157,45 +210,101 @@ export const updateRecurringTask = async (req, res) => {
     await task.populate('organization');
     await task.populate('mainAssignee');
     await task.populate('assignees');
+    await task.populate('project');
 
-    // ---------- הכנת היסטוריית שינויים קריאה ----------
+    // ---------- הכנת היסטוריית שינויים קריאה (כמו במשימות רגילות) ----------
     const userIdsToResolve = new Set();
     const assocIdsToResolve = new Set();
+    const projectIdsToResolve = new Set();
 
     for (const c of changes) {
-      if (c.field === 'mainAssignee') {
+      if (c.field === 'אחראי ראשי') {
         if (c.before) userIdsToResolve.add(c.before);
         if (c.after) userIdsToResolve.add(c.after);
-      } else if (c.field === 'assignees') {
+      } else if (c.field === 'אחראיים') {
         try {
-          const beforeArr = JSON.parse(c.before);
+          const beforeArr = JSON.parse(c.before || '[]');
           beforeArr.forEach(i => userIdsToResolve.add(i));
         } catch {}
         try {
-          const afterArr = JSON.parse(c.after);
+          const afterArr = JSON.parse(c.after || '[]');
           afterArr.forEach(i => userIdsToResolve.add(i));
         } catch {}
-      } else if (c.field === 'organization') {
+      } else if (c.field === 'עמותה') {
         if (c.before) assocIdsToResolve.add(c.before);
         if (c.after) assocIdsToResolve.add(c.after);
+      } else if (c.field === 'פרויקט') {
+        if (c.before) projectIdsToResolve.add(c.before);
+        if (c.after) projectIdsToResolve.add(c.after);
       }
     }
 
-    const [usersMapArr, assocsMapArr] = await Promise.all([
-      userIdsToResolve.size ? User.find({ _id: { $in: Array.from(userIdsToResolve) } }).select('_id userName').lean() : [],
-      assocIdsToResolve.size ? Association.find({ _id: { $in: Array.from(assocIdsToResolve) } }).select('_id name').lean() : []
+    // המרת Sets למערכים תקינים
+    const userIds = Array.from(userIdsToResolve)
+      .map(id => String(id))
+      .filter(id => mongoose.isValidObjectId(id));
+
+    const assocIds = Array.from(assocIdsToResolve)
+      .map(id => String(id))
+      .filter(id => mongoose.isValidObjectId(id));
+
+    const projectIds = Array.from(projectIdsToResolve)
+      .map(id => String(id))
+      .filter(id => id && mongoose.isValidObjectId(id));
+
+    console.log('IDs to resolve:', { userIds, assocIds, projectIds });
+
+    // בקשות DB מקבילות לקבלת שמות
+    const [usersMapArr, assocsMapArr, projectsMapArr] = await Promise.all([
+      userIds.length ? User.find({ _id: { $in: userIds } }).select('_id userName').lean() : [],
+      assocIds.length ? Association.find({ _id: { $in: assocIds } }).select('_id name').lean() : [],
+      projectIds.length ? Project.find({ _id: { $in: projectIds } }).select('_id name').lean() : []
     ]);
 
+    console.log("Retrieved data:", { usersMapArr, assocsMapArr, projectsMapArr });
+
+    // בניית מיפוי id -> name
     const userNameMap = new Map(usersMapArr.map(u => [String(u._id), u.userName]));
     const assocNameMap = new Map(assocsMapArr.map(a => [String(a._id), a.name]));
+    const projectNameMap = new Map(projectsMapArr.map(p => [String(p._id), p.name]));
 
+    // פונקציה להמיר ערכים לייצוג קריא
     const humanizeValue = (val) => {
-      if (!val) return null;
-      if (userNameMap.has(val)) return userNameMap.get(val);
-      if (assocNameMap.has(val)) return assocNameMap.get(val);
-      return val;
+      if (val === undefined || val === null || val === '') return null;
+
+      if (typeof val === 'string') {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) {
+            return parsed.map(p => (userNameMap.get(String(p)) || String(p))).join(', ');
+          }
+        } catch (e) {
+          // לא JSON — נמשיך
+        }
+        
+        if (userNameMap.has(val)) return userNameMap.get(val);
+        if (assocNameMap.has(val)) return assocNameMap.get(val);
+        if (projectNameMap.has(val)) return projectNameMap.get(val);
+        return val;
+      }
+
+      if (typeof val === 'object') {
+        if (val._id) {
+          const idStr = String(val._id);
+          if (userNameMap.has(idStr)) return userNameMap.get(idStr);
+          if (assocNameMap.has(idStr)) return assocNameMap.get(idStr);
+          if (projectNameMap.has(idStr)) return projectNameMap.get(idStr);
+          if (val.name) return val.name;
+          if (val.userName) return val.userName;
+          return idStr;
+        }
+        try { return JSON.stringify(val); } catch (e) { return String(val); }
+      }
+
+      return String(val);
     };
 
+    // בניית רשומות היסטוריה עם שמות במקום IDs
     const historyRecords = changes.map(c => ({
       taskId,
       user: user._id,
@@ -205,8 +314,10 @@ export const updateRecurringTask = async (req, res) => {
       date: new Date()
     }));
 
-    // כאן אפשר לשמור historyRecords בקולקציה ייעודית אם תרצי
-    console.log('RecurringTask changes history:', historyRecords);
+    // שמירת ההיסטוריה במסד הנתונים
+    await TaskRecurringHistory.insertMany(historyRecords);
+
+    console.log('RecurringTask changes history saved:', historyRecords);
 
     return res.json({ message: 'המשימה הקבועה עודכנה בהצלחה', task });
   } catch (err) {
