@@ -1,0 +1,64 @@
+import mongoose from 'mongoose';
+
+const userSchema = new mongoose.Schema({
+    userName: {
+        type: String,
+        required: true,
+        trim: true,
+        unique: true
+    },
+    email: {
+        type: String,
+        required: true,
+        trim: true,
+        unique: true,
+        match: [/^\S+@\S+\.\S+$/, 'אנא הזן כתובת דוא"ל תקינה']
+    },
+    password: {
+        type: String,
+        required: true,
+        minlength: 6,
+        select: false,
+        trim: true
+    },
+    firstName: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    lastName: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    role: {
+        type: String,
+        enum: ['מנהל', 'עובד'],
+        required: true
+    },
+    // מס נסונות
+    loginAttempts: { type: Number, default: 0 },
+    lockUntil: { type: Date, default: null },
+    lastLogin: { type: Date,  default: Date.now}, 
+    
+    // איפוס סיסמא
+    resetToken: {
+        type: String
+      },
+      resetTokenExpiry: {
+        type: Date
+      },
+    //עובד יכול להיות מקושר לכמה עמותות
+    associations: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Association',
+        required: function () {
+            return this.role === 'worker'; // רק לעובדים חובה עמותה
+        }
+    }]
+
+
+}, { timestamps: true });
+
+const User = mongoose.model('User', userSchema);
+export default User;
