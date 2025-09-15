@@ -31,7 +31,7 @@ export const generateAlerts = async () => {
 
     const overdueTasks = await Task.find({
         finalDeadline: { $lt: now },
-        status: { $nin: ['בוטלה', 'הושלמה'] },
+        status: { $nin: ['בוטלה', 'הושלם'] },
         isDeleted: false,
     });
 
@@ -230,7 +230,7 @@ export const getUserAlerts = async (req, res) => {
 
     const {
         resolved,
-        limit = 10,
+        limit = 30,
         skip = 0,
         sortBy = 'createdAt',
         order = 'desc'

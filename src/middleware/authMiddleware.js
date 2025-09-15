@@ -27,6 +27,6 @@ export const authMiddleware = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    return res.status(401).json({ message: 'טוקן שגוי או שפג תוקפו' });
+    return res.status(401).json({ message:'הסשן פג, אנא התחבר/י מחדש'});
   }
 };
