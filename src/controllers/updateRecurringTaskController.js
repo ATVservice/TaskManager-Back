@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 import RecurringTask from '../models/RecurringTask.js';
-import TaskRecurringHistory from '../models/TaskRecurringHistory.js'; // הוסף import
+import TaskRecurringHistory from '../models/TaskRecurringHistory.js';
 import User from '../models/User.js';
 import Association from '../models/Association.js';
-import Project from '../models/Project.js'; // הוסף import
+import Project from '../models/Project.js';
 import { getTaskPermissionLevel } from '../utils/taskPermissions.js';
 
 // בדיקות בסיסיות ללוגיקת תדירות
@@ -16,7 +16,6 @@ function validateFrequency(frequencyType, details) {
       if (!details.days || !Array.isArray(details.days) || details.days.length === 0) {
         return 'חובה לבחור לפחות יום אחד ביומי פרטני';
       }
-      // אין כפילויות
       const set = new Set(details.days);
       if (set.size !== details.days.length) {
         return 'קיימות כפילויות בימים שנבחרו';
@@ -78,15 +77,6 @@ export const updateRecurringTask = async (req, res) => {
       return v;
     };
 
-    const stringifyForHistory = (v) => {
-      if (v === undefined || v === null) return null;
-      if (v instanceof mongoose.Types.ObjectId) return String(v);
-      if (v instanceof Date) return v.toISOString();
-      if (Array.isArray(v)) return JSON.stringify(v);
-      if (typeof v === 'object') return v._id ? String(v._id) : JSON.stringify(v);
-      return String(v);
-    };
-
     const normalizeForCompare = (v) => {
       if (v === undefined || v === null) return null;
       if (v instanceof mongoose.Types.ObjectId) return String(v);
@@ -109,6 +99,13 @@ export const updateRecurringTask = async (req, res) => {
 
     const changes = [];
 
+    // טיפול מיוחד בשינוי סוג תדירות - ניקוי frequencyDetails הישן
+    if (updates.frequencyType && updates.frequencyType !== task.frequencyType) {
+      // אם משנים את סוג התדירות, ננקה לחלוטין את frequencyDetails
+      task.set('frequencyDetails', {});
+      console.log('Cleared old frequencyDetails due to frequencyType change');
+    }
+
     for (const [field, incomingValRaw] of Object.entries(updates)) {
       // ❌ לא נוגעים ב־status / notes - הם נשמרים ב-notes/updatesHistory
       if (field === 'status' || field === 'statusNote') continue;
@@ -123,7 +120,25 @@ export const updateRecurringTask = async (req, res) => {
       }
 
       const oldVal = task.get(field);
-      console.log(`Field "${field}": old=${stringifyForHistory(oldVal)}, incoming=${JSON.stringify(incomingValRaw)}, saveVal=${stringifyForHistory(saveVal)}`);
+
+      // טיפול מיוחד ב-frequencyDetails - החלפה מלאה במקום מיזוג
+      if (field === 'frequencyDetails') {
+        // תמיד החלף לחלוטין את frequencyDetails
+        const cleanedNewDetails = saveVal || {};
+        task.set('frequencyDetails', cleanedNewDetails);
+        
+        // רק אם יש הבדל אמיתי
+        if (!valuesEqual(oldVal, cleanedNewDetails)) {
+          changes.push({
+            field: 'פרטי תדירות',
+            beforeRaw: oldVal,
+            afterRaw: cleanedNewDetails,
+            before: null,
+            after: null
+          });
+        }
+        continue;
+      }
 
       if (!valuesEqual(oldVal, saveVal)) {
         task.set(field, saveVal);
@@ -135,8 +150,8 @@ export const updateRecurringTask = async (req, res) => {
           importance: 'חשיבות',
           subImportance: 'תת דירוג',
           mainAssignee: 'אחראי ראשי',
-          status:"סטטוס",
-          statusNote:"הערת סטטוס",
+          status: 'סטטוס',
+          statusNote: 'הערת סטטוס',
           assignees: 'אחראיים',
           project: 'פרויקט',
           organization: 'עמותה',
@@ -144,12 +159,13 @@ export const updateRecurringTask = async (req, res) => {
           frequencyDetails: 'פרטי תדירות'
         };
 
-
-
+        // שמירת הערכים המקוריים (לא JSON) לשימוש מאוחר יותר
         changes.push({
           field: fieldNamesMap[field] || field,
-          before: stringifyForHistory(oldVal),
-          after: stringifyForHistory(saveVal)
+          beforeRaw: oldVal,  // הערך המקורי
+          afterRaw: saveVal,  // הערך החדש המקורי
+          before: null,       // יוגדר מאוחר יותר עם השמות
+          after: null         // יוגדר מאוחר יותר עם השמות
         });
       }
     }
@@ -168,14 +184,15 @@ export const updateRecurringTask = async (req, res) => {
     // ---------- בדיקת subImportance כמו במשימות רגילות ----------
     const importanceChange = changes.find(c => c.field === 'חשיבות');
     if (importanceChange) {
-      const newImportance = importanceChange.after;
-      const newImportanceStr = newImportance === null ? null : String(newImportance);
+      const newImportanceStr = importanceChange.afterRaw === null ? null : String(importanceChange.afterRaw);
       if (newImportanceStr !== 'מיידי') {
         const existingSub = task.get('subImportance');
         if (existingSub !== undefined && existingSub !== null && existingSub !== '') {
           changes.push({
             field: 'תת דירוג',
-            before: stringifyForHistory(existingSub),
+            beforeRaw: existingSub,
+            afterRaw: null,
+            before: null,
             after: null
           });
 
@@ -212,47 +229,39 @@ export const updateRecurringTask = async (req, res) => {
     await task.populate('assignees');
     await task.populate('project');
 
-    // ---------- הכנת היסטוריית שינויים קריאה (כמו במשימות רגילות) ----------
+    // ---------- הכנת היסטוריית שינויים קריאה ----------
     const userIdsToResolve = new Set();
     const assocIdsToResolve = new Set();
     const projectIdsToResolve = new Set();
 
     for (const c of changes) {
       if (c.field === 'אחראי ראשי') {
-        if (c.before) userIdsToResolve.add(c.before);
-        if (c.after) userIdsToResolve.add(c.after);
+        const beforeId = c.beforeRaw instanceof mongoose.Types.ObjectId ? String(c.beforeRaw) : c.beforeRaw;
+        const afterId = c.afterRaw instanceof mongoose.Types.ObjectId ? String(c.afterRaw) : c.afterRaw;
+        if (beforeId) userIdsToResolve.add(beforeId);
+        if (afterId) userIdsToResolve.add(afterId);
       } else if (c.field === 'אחראיים') {
-        try {
-          const beforeArr = JSON.parse(c.before || '[]');
-          beforeArr.forEach(i => userIdsToResolve.add(i));
-        } catch {}
-        try {
-          const afterArr = JSON.parse(c.after || '[]');
-          afterArr.forEach(i => userIdsToResolve.add(i));
-        } catch {}
+        const beforeArr = Array.isArray(c.beforeRaw) ? c.beforeRaw : [];
+        const afterArr = Array.isArray(c.afterRaw) ? c.afterRaw : [];
+        beforeArr.forEach(id => userIdsToResolve.add(String(id)));
+        afterArr.forEach(id => userIdsToResolve.add(String(id)));
       } else if (c.field === 'עמותה') {
-        if (c.before) assocIdsToResolve.add(c.before);
-        if (c.after) assocIdsToResolve.add(c.after);
+        const beforeId = c.beforeRaw instanceof mongoose.Types.ObjectId ? String(c.beforeRaw) : c.beforeRaw;
+        const afterId = c.afterRaw instanceof mongoose.Types.ObjectId ? String(c.afterRaw) : c.afterRaw;
+        if (beforeId) assocIdsToResolve.add(beforeId);
+        if (afterId) assocIdsToResolve.add(afterId);
       } else if (c.field === 'פרויקט') {
-        if (c.before) projectIdsToResolve.add(c.before);
-        if (c.after) projectIdsToResolve.add(c.after);
+        const beforeId = c.beforeRaw instanceof mongoose.Types.ObjectId ? String(c.beforeRaw) : c.beforeRaw;
+        const afterId = c.afterRaw instanceof mongoose.Types.ObjectId ? String(c.afterRaw) : c.afterRaw;
+        if (beforeId) projectIdsToResolve.add(beforeId);
+        if (afterId) projectIdsToResolve.add(afterId);
       }
     }
 
     // המרת Sets למערכים תקינים
-    const userIds = Array.from(userIdsToResolve)
-      .map(id => String(id))
-      .filter(id => mongoose.isValidObjectId(id));
-
-    const assocIds = Array.from(assocIdsToResolve)
-      .map(id => String(id))
-      .filter(id => mongoose.isValidObjectId(id));
-
-    const projectIds = Array.from(projectIdsToResolve)
-      .map(id => String(id))
-      .filter(id => id && mongoose.isValidObjectId(id));
-
-    console.log('IDs to resolve:', { userIds, assocIds, projectIds });
+    const userIds = Array.from(userIdsToResolve).filter(id => mongoose.isValidObjectId(id));
+    const assocIds = Array.from(assocIdsToResolve).filter(id => mongoose.isValidObjectId(id));
+    const projectIds = Array.from(projectIdsToResolve).filter(id => mongoose.isValidObjectId(id));
 
     // בקשות DB מקבילות לקבלת שמות
     const [usersMapArr, assocsMapArr, projectsMapArr] = await Promise.all([
@@ -261,61 +270,98 @@ export const updateRecurringTask = async (req, res) => {
       projectIds.length ? Project.find({ _id: { $in: projectIds } }).select('_id name').lean() : []
     ]);
 
-    console.log("Retrieved data:", { usersMapArr, assocsMapArr, projectsMapArr });
-
     // בניית מיפוי id -> name
     const userNameMap = new Map(usersMapArr.map(u => [String(u._id), u.userName]));
     const assocNameMap = new Map(assocsMapArr.map(a => [String(a._id), a.name]));
     const projectNameMap = new Map(projectsMapArr.map(p => [String(p._id), p.name]));
 
+    // פונקציה להמרת פרטי תדירות לטקסט קריא
+    const humanizeFrequencyDetails = (details, frequencyType) => {
+      if (!details || typeof details !== 'object') return details;
+      
+      try {
+        switch (frequencyType) {
+          case 'יומי':
+            return details.includingFriday ? 'כולל ימי שישי' : 'ללא ימי שישי';
+          
+          case 'יומי פרטני':
+            if (details.days && Array.isArray(details.days)) {
+              const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי'];
+              const selectedDays = details.days.map(dayNum => dayNames[dayNum] || dayNum).join(', ');
+              return `ימים: ${selectedDays}`;
+            }
+            return 'ימים לא צוינו';
+          
+          case 'חודשי':
+            return details.dayOfMonth ? `יום ${details.dayOfMonth} בחודש` : 'יום לא צוין';
+          
+          case 'שנתי':
+            if (details.day && details.month) {
+              const monthNames = ['', 'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 
+                               'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+              const monthName = monthNames[details.month] || details.month;
+              return `${details.day} ב${monthName}`;
+            }
+            return 'תאריך לא צוין';
+          
+          default:
+            return JSON.stringify(details);
+        }
+      } catch (e) {
+        return String(details);
+      }
+    };
+
     // פונקציה להמיר ערכים לייצוג קריא
-    const humanizeValue = (val) => {
+    const humanizeValue = (val, fieldName) => {
       if (val === undefined || val === null || val === '') return null;
 
-      if (typeof val === 'string') {
-        try {
-          const parsed = JSON.parse(val);
-          if (Array.isArray(parsed)) {
-            return parsed.map(p => (userNameMap.get(String(p)) || String(p))).join(', ');
-          }
-        } catch (e) {
-          // לא JSON — נמשיך
-        }
-        
-        if (userNameMap.has(val)) return userNameMap.get(val);
-        if (assocNameMap.has(val)) return assocNameMap.get(val);
-        if (projectNameMap.has(val)) return projectNameMap.get(val);
-        return val;
+      // טיפול מיוחד בפרטי תדירות
+      if (fieldName === 'פרטי תדירות') {
+        const currentFrequencyType = task.frequencyType || updates.frequencyType;
+        return humanizeFrequencyDetails(val, currentFrequencyType);
       }
 
-      if (typeof val === 'object') {
-        if (val._id) {
-          const idStr = String(val._id);
-          if (userNameMap.has(idStr)) return userNameMap.get(idStr);
-          if (assocNameMap.has(idStr)) return assocNameMap.get(idStr);
-          if (projectNameMap.has(idStr)) return projectNameMap.get(idStr);
-          if (val.name) return val.name;
-          if (val.userName) return val.userName;
-          return idStr;
-        }
-        try { return JSON.stringify(val); } catch (e) { return String(val); }
+      // טיפול באחראיים (מערך)
+      if (fieldName === 'אחראיים' && Array.isArray(val)) {
+        return val.map(id => userNameMap.get(String(id)) || String(id)).join(', ');
+      }
+
+      // טיפול באחראי ראשי
+      if (fieldName === 'אחראי ראשי') {
+        const idStr = String(val);
+        return userNameMap.get(idStr) || idStr;
+      }
+
+      // טיפול בעמותה
+      if (fieldName === 'עמותה') {
+        const idStr = String(val);
+        return assocNameMap.get(idStr) || idStr;
+      }
+
+      // טיפול בפרויקט
+      if (fieldName === 'פרויקט') {
+        const idStr = String(val);
+        return projectNameMap.get(idStr) || idStr;
       }
 
       return String(val);
     };
 
-    // בניית רשומות היסטוריה עם שמות במקום IDs
+    // עכשיו המרת כל השינויים לטקסט קריא
     const historyRecords = changes.map(c => ({
       taskId,
       user: user._id,
       field: c.field,
-      before: humanizeValue(c.before),
-      after: humanizeValue(c.after),
+      before: humanizeValue(c.beforeRaw, c.field),
+      after: humanizeValue(c.afterRaw, c.field),
       date: new Date()
     }));
 
     // שמירת ההיסטוריה במסד הנתונים
-    await TaskRecurringHistory.insertMany(historyRecords);
+    if (historyRecords.length > 0) {
+      await TaskRecurringHistory.insertMany(historyRecords);
+    }
 
     console.log('RecurringTask changes history saved:', historyRecords);
 

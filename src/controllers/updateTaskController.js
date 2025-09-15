@@ -13,58 +13,83 @@ import isBetween from 'dayjs/plugin/isBetween.js';
 dayjs.extend(isBetween);
 
 // בודק האם לשנות לכולם להושלם
+// מסמן משימה כהושלמה אם צריך
 async function checkAndMarkTaskCompleted(taskId) {
   const task = await Task.findById(taskId);
   if (!task) return;
 
-  const details = await TaskAssigneeDetails.find({ taskId, taskModel: 'Task' });
+  const details = await TaskAssigneeDetails.find({ taskId: task._id, taskModel: 'Task' });
+  if (!details) return;
 
-  // רשימת משניים של המשימה
-  const secondaryIds = task.assignees.map(a => String(a)).filter(a => String(a) !== String(task.mainAssignee));
-
-  if (secondaryIds.length > 0) {
-    // לוקח רק את ה-TaskAssigneeDetails של המשניים
-    const secondaryDetails = details.filter(d => secondaryIds.includes(String(d.user)));
-
-    // אם **אין רשומות לכל המשניים** אז לא משנה סטטוס גלובלי
-    if (secondaryDetails.length !== secondaryIds.length) return;
-
-    // אם כל המשניים סיימו
-    const allSecondaryCompleted = secondaryDetails.every(d => d.status === 'הושלם');
-    if (allSecondaryCompleted) {
-      await Task.findByIdAndUpdate(taskId, { status: 'הושלם' });
-    }
+  // אם הראשי השלים → מספיק כדי להשלים את המשימה
+  const mainDetail = details.find(d => String(d.user) === String(task.mainAssignee));
+  if (mainDetail && mainDetail.status === 'הושלם') {
+    await Task.findByIdAndUpdate(taskId, { status: 'הושלם' });
+    return;
   }
-};
-// בודק האם לבטל את הושלם מהסטטוס הכללי
-async function checkAndUnsetTaskCompletedIfNeeded(taskId, changedUserId, newStatus) {
-  if (newStatus === 'הושלם') return; // לא משנה אם משלים, רק כשהופך לסטטוס אחר
 
-  const task = await Task.findById(taskId);
-  if (!task) return;
+  // אם אחד מהמשתמשים הוא מנהל והשלים → מספיק
+  const managerCompleted = await User.exists({ 
+    _id: { $in: details.filter(d => d.status === 'הושלם').map(d => d.user) },
+    role: 'מנהל'
+  });
+  if (managerCompleted) {
+    await Task.findByIdAndUpdate(taskId, { status: 'הושלם' });
+    return;
+  }
 
-  // אם הסטטוס הכללי כבר לא "הושלם", אין מה לעשות
-  if (task.status !== 'הושלם') return;
-
-  const details = await TaskAssigneeDetails.find({ taskId, taskModel: 'Task' });
-
-  // רשימת משניים
-  const secondaryIds = task.assignees.map(a => String(a)).filter(a => String(a) !== String(task.mainAssignee));
+  // בדיקה אם כל המשניים השלימו
+  const secondaryIds = task.assignees
+    .map(a => String(a))
+    .filter(a => String(a) !== String(task.mainAssignee));
 
   if (secondaryIds.length === 0) return;
 
-  // לוקח רק את ה-TaskAssigneeDetails של המשניים
   const secondaryDetails = details.filter(d => secondaryIds.includes(String(d.user)));
 
-  // אם לא כל המשניים קיימים ברשומות, לא נגע בסטטוס
+  // אם חסר אחד מהמשניים (עוד לא עדכן בכלל) → לא משלים
   if (secondaryDetails.length !== secondaryIds.length) return;
 
-  // בדיקה: אם המשתמש ששינה סטטוס היה חלק מהמשניים והסטטוס שלו כבר לא "הושלם"
-  const changedDetail = secondaryDetails.find(d => String(d.user) === String(changedUserId));
-  if (!changedDetail) return;
+  const allSecondaryCompleted = secondaryDetails.every(d => d.status === 'הושלם');
+  if (allSecondaryCompleted) {
+    await Task.findByIdAndUpdate(taskId, { status: 'הושלם' });
+  }
+}
 
-  // בטל סטטוס גלובלי
-  await Task.findByIdAndUpdate(taskId, { status: 'בטיפול' }); // או סטטוס ברירת מחדל שמתאים לך
+// מבטל הושלם אם צריך
+async function checkAndUnsetTaskCompletedIfNeeded(taskId, changedUserId, newStatus) {
+  if (newStatus === 'הושלם') return; // לא נוגעים כשמישהו משלים
+
+  const task = await Task.findById(taskId);
+  if (!task || task.status !== 'הושלם') return;
+
+  const details = await TaskAssigneeDetails.find({ taskId: task._id, taskModel: 'Task' });
+
+  // אם הראשי שינה לסטטוס שאינו הושלם → בטל הושלם
+  if (String(task.mainAssignee) === String(changedUserId)) {
+    await Task.findByIdAndUpdate(taskId, { status: 'בטיפול' });
+    return;
+  }
+
+  // אם המשתמש מנהל → בטל הושלם
+  const changedUser = await User.findById(changedUserId);
+  if (changedUser?.role === 'מנהל') {
+    await Task.findByIdAndUpdate(taskId, { status: 'בטיפול' });
+    return;
+  }
+
+  // בדיקה אם נשאר משני אחד לפחות שלא השלים
+  const secondaryIds = task.assignees
+    .map(a => String(a))
+    .filter(a => String(a) !== String(task.mainAssignee));
+
+  const secondaryDetails = details.filter(d => secondaryIds.includes(String(d.user)));
+
+  const someSecondaryNotCompleted = secondaryDetails.some(d => d.status !== 'הושלם');
+
+  if (someSecondaryNotCompleted) {
+    await Task.findByIdAndUpdate(taskId, { status: 'בטיפול' });
+  }
 }
 
 
@@ -198,14 +223,20 @@ export const updateTask = async (req, res) => {
 
       await checkAndMarkTaskCompleted(taskId);
 
+      const fieldNamesMap = {
+        status: 'סטטוס',
+        statusNote: 'הערת סטטוס'
+      };
+
       const history = Object.entries(personalUpdates).map(([field, newVal]) => ({
         taskId,
         user: user._id,
-        field: field,
-        before: previous?.[field] ?? null,
+        field: fieldNamesMap[field] || field,
+        before: previous ? previous[field] : task[field], 
         after: newVal,
         date: new Date()
       }));
+
       await TaskHistory.insertMany(history);
 
       return res.json({ message: 'עדכון אישי נשמר בהצלחה' });
@@ -273,7 +304,7 @@ export const updateTask = async (req, res) => {
           importance: 'חשיבות',
           subImportance: 'תת דירוג',
           status: 'סטטוס',
-          statusNote:"הערת סטטוס",
+          statusNote: "הערת סטטוס",
           mainAssignee: 'אחראי ראשי',
           assignees: 'אחראיים',
           project: 'פרויקט',
@@ -482,7 +513,7 @@ export const updateTask = async (req, res) => {
       .map(id => String(id))
       .filter(id => id && mongoose.isValidObjectId(id));
 
-       console.log('IDs to resolve:', { userIds, assocIds, projectIds }); // דיבאג
+    console.log('IDs to resolve:', { userIds, assocIds, projectIds }); // דיבאג
 
     // בקשות DB מקבילות לקבלת שמות - הוסף גם Project
     const [usersMapArr, assocsMapArr, projectsMapArr] = await Promise.all([
@@ -491,7 +522,7 @@ export const updateTask = async (req, res) => {
       projectIds.length ? Project.find({ _id: { $in: projectIds } }).select('_id name').lean() : []
     ]);
 
-    console.log("Retrieved data:", { usersMapArr, assocsMapArr, projectsMapArr }); 
+    console.log("Retrieved data:", { usersMapArr, assocsMapArr, projectsMapArr });
 
 
     // בוני מיפוי id -> name
@@ -502,7 +533,7 @@ export const updateTask = async (req, res) => {
 
     // פונקציה עזר להמיר ערכים לייצוג קריא
     const humanizeValue = (val) => {
-      if (val === undefined || val === null || val ==='') return null;
+      if (val === undefined || val === null || val === '') return null;
 
       // אם זה מחרוזת שנראית כמו JSON של מערך
       if (typeof val === 'string') {
@@ -529,7 +560,7 @@ export const updateTask = async (req, res) => {
           const idStr = String(val._id);
           if (userNameMap.has(idStr)) return userNameMap.get(idStr);
           if (assocNameMap.has(idStr)) return assocNameMap.get(idStr);
-          if (projectNameMap.has(idStr)) return projectNameMap.get(idStr); 
+          if (projectNameMap.has(idStr)) return projectNameMap.get(idStr);
 
           if (val.name) return val.name;
           if (val.userName) return val.userName;

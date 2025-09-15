@@ -1,4 +1,3 @@
-import RecurringTask from '../models/RecurringTask.js';
 import Task from '../models/Task.js';
 import TaskHistory from '../models/TaskHistory.js';
 import { getTaskPermissionLevel } from '../utils/taskPermissions.js';
@@ -9,12 +8,9 @@ export const getTaskHistory = async (req, res) => {
         const { taskId } = req.params;
         const user = req.user;
 
-        const { model } = req.query; 
-        const Model = model === 'TodayTask' ? TodayTask : model === 'RecurringTask' ? RecurringTask :  model === 'Task' ? Task : Task;
 
-        console.log("MModel",Model)
 
-        const task = await Model.findById(taskId);
+        const task = await Task.findById(taskId);
 
 
         if (!task) return res.status(404).json({ message: 'משימה לא נמצאה' });
