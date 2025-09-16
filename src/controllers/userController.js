@@ -4,7 +4,7 @@ import User from "../models/User.js";
 import bcrypt from 'bcrypt';
 
 export const getAllEmployees = async (req, res) => {
-  const employees = await User.find({ role: 'עובד' });
+  const employees = await User.find();
   return res.status(200).json(employees);
 };
 
@@ -75,7 +75,7 @@ export const deleteUser = async (req, res) => {
 
 export const getUserNamesEmployees = async (req, res) => {
   try {
-    const employees = await User.find({ role: 'עובד' }).select('userName _id');
+    const employees = await User.find().select('userName _id');
     // const names = employees.map(emp => emp.userName);
     return res.status(200).json(employees);
   } catch (error) {
@@ -84,7 +84,7 @@ export const getUserNamesEmployees = async (req, res) => {
 };
 export const getNamesEmployees = async (req, res) => {
   try {
-    const employees = await User.find({ role: 'עובד' }).select('userName firstName lastName _id');
+    const employees = await User.find().select('userName firstName lastName _id');
     return res.status(200).json(employees);
   } catch (error) {
     return res.status(500).json({ error: 'שגיאה בעת שליפת העובדים' });
