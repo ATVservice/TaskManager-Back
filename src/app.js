@@ -21,6 +21,7 @@ dotenv.config();
 
 
 const app = express();
+console.log("בדיקת שרת",process.env.FRONT_PORT)
 app.use(cors({
     origin: process.env.FRONT_PORT,
     credentials: true
