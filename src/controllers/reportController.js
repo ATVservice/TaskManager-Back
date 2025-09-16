@@ -11,12 +11,9 @@ import isoWeek from 'dayjs/plugin/isoWeek.js';
 import utc from 'dayjs/plugin/utc.js';
 import timezone from 'dayjs/plugin/timezone.js';
 
-
-// הוספת plugins
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isoWeek);
-
 
 
 // פונקציות עזר חדשות למסד נתונים
@@ -74,7 +71,6 @@ export const resetUserFilter = async (userId, screenType) => {
     throw error;
   }
 };
-
 const cleanEmptyFilters = (filters) => {
   const cleaned = {};
 
@@ -171,12 +167,11 @@ const expandRecurringTasks = (recurringTasks, dateFilter = null) => {
   recurringTasks.forEach(task => {
     // אם אין notes, זה אומר שהמשימה לא בוצעה אף פעם
     if (!task.notes || task.notes.length === 0) {
-      // נכלול את המשימה הקבועה עצמה כ"לא בוצעה"
       expandedTasks.push({
         ...task.toObject(),
         taskType: 'קבועה',
         noteDate: null,
-        noteStatus: task.status, // הסטטוס הנוכחי של המשימה הקבועה
+        noteStatus: task.status,
         noteContent: null,
         isFromNote: false,
         daysOpen: task.daysOpen || 0
@@ -253,7 +248,6 @@ function buildTaskFilter(query) {
   if (status) {
     filter.status = Array.isArray(status) ? { $in: status } : status;
   }
-
   // סיבת אי ביצוע
   if (reasonId) {
     filter.failureReason = reasonId;
@@ -261,25 +255,8 @@ function buildTaskFilter(query) {
 
   return filter;
 }
-// 
-// מקבל את המשימה והמשתמש ומחזיר את הסטטוס הנכון
-const getTaskStatusForUser = (task, userId) => {
-  if (task.taskModel === "Task") {
-    // נבדוק האם יש למשתמש רשומה ב-TaskAssigneeDetails
-    const assigneeDetail = task.taskAssigneeDetails?.find(
-      (d) => d.user.toString() === userId.toString()
-    );
-    if (assigneeDetail) {
-      return assigneeDetail.status; // הסטטוס הספציפי של המשתמש
-    }
-    return task.status; // fallback לסטטוס הכללי
-  }
 
-  // במשימה קבועה לא נוגעים
-  return task.status;
-};
-
-// 1. דוח משימות פתוחות לפי עובדים - מעודכן
+// 1. דוח משימות פתוחות לפי עובדים
 export const getOpenTasksByEmployee = async (req, res) => {
   try {
     const { status = ['בטיפול', 'לביצוע'] } = req.query;
@@ -370,10 +347,7 @@ export const getOpenTasksByEmployee = async (req, res) => {
         });
       }
 
-      // לכל עובד
       employees.forEach(emp => {
-        if (emp.user.role === 'מנהל') return;
-
         const empId = emp.user._id.toString();
         if (!tasksByEmployee[empId]) {
           tasksByEmployee[empId] = {
@@ -456,7 +430,7 @@ export const getOpenTasksByEmployee = async (req, res) => {
   }
 };
 
-// 2. דוח משימות לפי אחראים ראשיים ומשניים - מעודכן
+// 2. דוח משימות לפי אחראים ראשיים ומשניים 
 export const getTasksByResponsibility = async (req, res) => {
   try {
     const { responsibilityType = 'all' } = req.query;
@@ -466,7 +440,6 @@ export const getTasksByResponsibility = async (req, res) => {
     const { employeeId, ...filterParams } = req.query;
     let baseFilter = buildTaskFilter(filterParams);
 
-    // המרת מזהי Mongo בתוך ה-filter כמו שעשית בקוד הקודם
     if (baseFilter.organization) {
       baseFilter.organization = new mongoose.Types.ObjectId(baseFilter.organization);
     }
@@ -487,7 +460,7 @@ export const getTasksByResponsibility = async (req, res) => {
       });
     }
 
-    // --- שליפה ראשונית של משימות רגילות וקבועות (עם lookups) ---
+    //  שליפה ראשונית של משימות רגילות וקבועות 
     const pipeline = [
       { $match: baseFilter },
       {
@@ -519,7 +492,6 @@ export const getTasksByResponsibility = async (req, res) => {
     const regularTasks = await Task.aggregate(pipeline);
     const recurringTasksRaw = await RecurringTask.aggregate([
       ...pipeline,
-      // נחזור גם עם ה־notes (ולכן נקבל גם noteUsersData אם נרצה)
       {
         $lookup: {
           from: 'users',
@@ -530,7 +502,7 @@ export const getTasksByResponsibility = async (req, res) => {
       }
     ]);
 
-    // --- שליפת TaskAssigneeDetails לכל המשימות (רגילות + קבועות) ---
+    //  שליפת TaskAssigneeDetails לכל המשימות (רגילות + קבועות) 
     const regularIds = regularTasks.map(t => t._id).filter(Boolean);
     const recurringIds = recurringTasksRaw.map(t => t._id).filter(Boolean);
 
@@ -542,7 +514,6 @@ export const getTasksByResponsibility = async (req, res) => {
       ? await TaskAssigneeDetails.find({ $or: detailsQueryOr }).lean()
       : [];
 
-    // ממפה: detailsByTask[taskIdStr] = { userIdStr: detailObj, ... }
     const detailsByTask = {};
     allAssigneeDetails.forEach(d => {
       const k = String(d.taskId);
@@ -550,14 +521,12 @@ export const getTasksByResponsibility = async (req, res) => {
       detailsByTask[k][String(d.user)] = d;
     });
 
-    // --- עיבוד משימות קבועות: קיבוץ notes לפי תאריך (occurrence) ולא יצירת כניסה לכל note יחיד ---
-    const expandedRecurringTasks = []; // פה נכניס occurrence מאוגדן לכל תאריך שבו יש notes (או fallback ל-task עצמו אם אין notes)
+    const expandedRecurringTasks = [];
     for (const rtask of recurringTasksRaw) {
       const taskIdStr = String(rtask._id);
       const notes = Array.isArray(rtask.notes) ? rtask.notes : [];
 
       if (notes.length === 0) {
-        // אין notes כלל — נשמר כאותו recurring template (כמו בקוד המקורי)
         expandedRecurringTasks.push({
           ...rtask,
           taskType: 'קבועה',
@@ -571,7 +540,7 @@ export const getTasksByResponsibility = async (req, res) => {
       // קיבוץ לפי יום (YYYY-MM-DD)
       const notesByDay = {};
       notes.forEach(n => {
-        const dayKey = new Date(n.date).toISOString().slice(0, 10); // YYYY-MM-DD
+        const dayKey = new Date(n.date).toISOString().slice(0, 10);
         if (!notesByDay[dayKey]) notesByDay[dayKey] = [];
         notesByDay[dayKey].push(n);
       });
@@ -584,25 +553,21 @@ export const getTasksByResponsibility = async (req, res) => {
           const uid = String(n.user);
           if (!lastNoteByUser[uid]) lastNoteByUser[uid] = n;
           else {
-            // נשווה תאריכים ונבחר את החדש ביותר
+            // השוואת תאריכים ונבחר את החדש ביותר
             if (new Date(n.date) > new Date(lastNoteByUser[uid].date)) lastNoteByUser[uid] = n;
           }
         });
 
-        // יצירת מפת notes עבור occurrence (userId -> note)
         const occurrenceNotesMap = {};
         Object.entries(lastNoteByUser).forEach(([uid, note]) => {
           occurrenceNotesMap[uid] = note;
         });
 
-        // helper: compute overall occurrence status לפי הכללים שהגדרת
         const computeOccurrenceOverallStatus = (taskObj, notesMap, detailsMapForTask) => {
-          // mainAssignee id
           const mainIdStr = taskObj.mainAssigneeData && taskObj.mainAssigneeData[0]
             ? String(taskObj.mainAssigneeData[0]._id)
             : (taskObj.mainAssignee ? String(taskObj.mainAssignee) : null);
 
-          // מציאת סטטוס אפקטיבי של משתמש (details -> then note -> fallback ל־taskObj.status)
           const effectiveStatusForUser = (userIdStr) => {
             if (!userIdStr) return taskObj.status || null;
             if (detailsMapForTask && detailsMapForTask[userIdStr] && detailsMapForTask[userIdStr].status) {
@@ -614,7 +579,6 @@ export const getTasksByResponsibility = async (req, res) => {
             return taskObj.status || null;
           };
 
-          // בדיקה: האם main סיים?
           if (mainIdStr) {
             const mainStatus = effectiveStatusForUser(mainIdStr);
             if (mainStatus === 'הושלם') return 'הושלם';
@@ -626,12 +590,12 @@ export const getTasksByResponsibility = async (req, res) => {
             return 'הושלם';
           }
 
-          // אחרת נבדוק משניים: נדרוש שיש סטטוס לכל משני (details או note) ואז כולם 'הושלם'
+          // אחרת בודק משניים: נדרוש שיש סטטוס לכל משני (details או note) ואז כולם 'הושלם'
           const assigneesArr = taskObj.assigneesData && taskObj.assigneesData.length
             ? taskObj.assigneesData.map(a => String(a._id))
             : (Array.isArray(taskObj.assignees) ? taskObj.assignees.map(a => String(a)) : []);
 
-          // ניקח רק משניים (לא הראשי אם קיים)
+          //  רק משניים (לא הראשי אם קיים)
           const secondaryIds = assigneesArr.filter(aid => aid !== mainIdStr);
 
           if (secondaryIds.length === 0) {
@@ -657,33 +621,30 @@ export const getTasksByResponsibility = async (req, res) => {
 
           if (allHaveStatus && allCompleted) return 'הושלם';
 
-          // אחרת — לא ניתן לטעון שהושלם לפי כללי המשניים, נחזיר כברירת מחדל את סטטוס התבנית
+          // אחרת — לא ניתן לטעון שהושלם לפי כללי המשניים, מחזיר כברירת מחדל את סטטוס התבנית
           return taskObj.status || 'לביצוע';
         };
 
         const overallStatus = computeOccurrenceOverallStatus(rtask, occurrenceNotesMap, detailsByTask[taskIdStr]);
 
-        // דוח של occurrence — שמרתי את השדות הקיימים + שדה noteDate/noteStatus כפי שהיה אצלך
         expandedRecurringTasks.push({
           ...rtask,
           taskType: 'קבועה',
           noteStatus: overallStatus,
-          noteDate: new Date(dayKey).toISOString(), // תאריך ה-occurrence
+          noteDate: new Date(dayKey).toISOString(),
           isFromNote: true,
-          // שדה נוסף שימושי לשימוש פנימי (לא משנה את המבנה העיקרי)
           _occurrenceNotesMap: occurrenceNotesMap,
           _taskAssigneeDetailsMap: detailsByTask[taskIdStr] || {}
         });
-      } // end for each dayKey
-    } // end for each recurring task
+      }
+    }
 
-    // --- איחוד כל המשימות (רגילות + occurrences משודרגות) ---
     const allTasks = [
       ...regularTasks.map(t => ({ ...t, taskType: 'רגילה', _taskAssigneeDetailsMap: detailsByTask[String(t._id)] || {} })),
       ...expandedRecurringTasks
     ];
 
-    // --- בניית הדוח לפי אחראים (main/secondary) עם הסטטוסים המותאמים לעובד ---
+    //  בניית הדוח לפי אחראים (main/secondary) עם הסטטוסים המותאמים לעובד 
     const responsibilityReport = {
       mainResponsible: {},
       secondaryResponsible: {},
@@ -709,14 +670,10 @@ export const getTasksByResponsibility = async (req, res) => {
       return taskObj.status || (taskObj.noteStatus || 'לביצוע');
     };
 
-    // עזר: חישוב overall status של רשומה (רגילה/occurrence) לפי הכללים (השתמשנו גם קודם כשיצרנו occurrences)
     const computeOverallStatusForTaskRecord = (taskObj) => {
-      // אם ישנו noteStatus (ל־occurrence) השתמש בו כחוזק ראשון
       if (taskObj.isFromNote) {
-        // כבר חושב כ־noteStatus בעת יצירה, נחזיר אותו
         return taskObj.noteStatus || taskObj.status || 'לביצוע';
       }
-      // אחרת לרוב משימה רגילה – ניישם את אותו כלל: main או כל המשניים
       const mainIdStr = taskObj.mainAssigneeData && taskObj.mainAssigneeData[0]
         ? String(taskObj.mainAssigneeData[0]._id)
         : (taskObj.mainAssignee ? String(taskObj.mainAssignee) : null);
@@ -763,7 +720,7 @@ export const getTasksByResponsibility = async (req, res) => {
       const mainAssignee = task.mainAssigneeData && task.mainAssigneeData[0] ? task.mainAssigneeData[0] : null;
       const assignees = Array.isArray(task.assigneesData) ? task.assigneesData : (Array.isArray(task.assignees) ? task.assignees.map(id => ({ _id: id })) : []);
 
-      // --- MAIN responsible ---
+      //  MAIN responsible 
       if (mainAssignee && (!employeeId || String(mainAssignee._id) === String(employeeId))) {
         const mainKey = String(mainAssignee._id);
         if (!responsibilityReport.mainResponsible[mainKey]) {
@@ -827,14 +784,14 @@ export const getTasksByResponsibility = async (req, res) => {
         }
       });
 
-      // --- סיכום כללי (byImportance/byStatus) לפי overallStatus ---
+      //  סיכום כללי (byImportance/byStatus) לפי overallStatus
       responsibilityReport.summary.byImportance[task.importance] =
         (responsibilityReport.summary.byImportance[task.importance] || 0) + 1;
       responsibilityReport.summary.byStatus[overallStatus] =
         (responsibilityReport.summary.byStatus[overallStatus] || 0) + 1;
     });
 
-    // --- סינון לפי סוג אחריות אם נדרש ---
+    //  סינון לפי סוג אחריות אם נדרש 
     let filteredResponse = responsibilityReport;
     if (responsibilityType === 'main') {
       filteredResponse = {
@@ -854,7 +811,6 @@ export const getTasksByResponsibility = async (req, res) => {
       };
     }
 
-    // החזרת התוצאה (שמעניקה בדיוק את המבנה שהיית מצפה לו)
     return res.json({
       success: true,
       data: filteredResponse,
@@ -1001,10 +957,7 @@ export const getOverdueTasks = async (req, res) => {
     res.status(500).json({ success: false, message: 'שגיאה בשליפת דוח משימות באיחור' });
   }
 };
-// 4. סיכום משימות לפי תקופה - מעודכן
-
-
-// פונקציה משופרת לסיכום משימות - ביצועים מוטבים ללא פגיעה בדיוק
+// 4. סיכום משימות לפי תקופה 
 
 const ISRAEL_TIMEZONE = "Asia/Jerusalem";
 const MAX_DAYS_LIMITS = { week: 70, month: 365, year: 3650 };
@@ -1013,12 +966,12 @@ const MAX_DAYS_LIMITS = { week: 70, month: 365, year: 3650 };
 const taskCompletionCache = new Map();
 const dateGenerationCache = new Map();
 
-// פונקציות עזר מוטבות
+// פונקציות עזר 
 const getIsraeliDate = (date) => dayjs(date).tz(ISRAEL_TIMEZONE);
 const getStartOfDay = (date) => getIsraeliDate(date).startOf('day');
 const getEndOfDay = (date) => getIsraeliDate(date).endOf('day');
 
-// פונקציה מוטבת לקביעת טווח תאריכים
+// פונקציה  לקביעת טווח תאריכים
 const getPeriodRange = (period) => {
   const now = getIsraeliDate();
   let periodStart;
@@ -1044,9 +997,9 @@ const getPeriodRange = (period) => {
     periodStart = now.subtract(maxDays, 'day').startOf('day');
   }
 
-  return { 
-    start: periodStart.toDate(), 
-    end: now.endOf('day').toDate() 
+  return {
+    start: periodStart.toDate(),
+    end: now.endOf('day').toDate()
   };
 };
 
@@ -1054,7 +1007,7 @@ const getPeriodRange = (period) => {
 const isRecurringTaskCompleted = (task, targetDate) => {
   const dateKey = targetDate.getTime();
   const cacheKey = `${task._id}-${dateKey}`;
-  
+
   if (taskCompletionCache.has(cacheKey)) {
     return taskCompletionCache.get(cacheKey);
   }
@@ -1066,7 +1019,7 @@ const isRecurringTaskCompleted = (task, targetDate) => {
     }
 
     const targetDay = getStartOfDay(targetDate);
-    
+
     // סינון מהיר יותר עם בדיקה מוקדמת של תאריכים
     const dayNotes = task.notes.filter(note => {
       if (!note.date) return false;
@@ -1083,7 +1036,7 @@ const isRecurringTaskCompleted = (task, targetDate) => {
     const hasManagerCompletion = dayNotes.some(note =>
       note.status === 'הושלם' && note.user?.role === 'מנהל'
     );
-    
+
     if (hasManagerCompletion) {
       taskCompletionCache.set(cacheKey, true);
       return true;
@@ -1098,7 +1051,7 @@ const isRecurringTaskCompleted = (task, targetDate) => {
     // מיון ועיבוד ההערות
     const sortedNotes = dayNotes.sort((a, b) => new Date(a.date) - new Date(b.date));
     const lastStatusByUser = new Map();
-    
+
     sortedNotes.forEach(note => {
       if (note.user) {
         const userId = (typeof note.user === 'object' ? note.user._id : note.user).toString();
@@ -1123,7 +1076,7 @@ const isRecurringTaskCompleted = (task, targetDate) => {
     // בדיקת אחראי ראשי
     if (mainAssigneeId && completedUsers.has(mainAssigneeId)) {
       isCompleted = true;
-    } 
+    }
     // בדיקת כל האחראים השניים
     else if (assigneeIds.size > 0) {
       isCompleted = Array.from(assigneeIds).every(id => completedUsers.has(id));
@@ -1150,8 +1103,7 @@ const generateRecurringDatesOptimized = (task, startDate, endDate) => {
   const dates = [];
   const start = getStartOfDay(startDate);
   const end = getEndOfDay(endDate);
-  
-  // חישוב מגבלה בטיחותית גבוהה (לא מזיקה)
+
   const totalDays = end.diff(start, 'day') + 1;
   const SAFETY_LIMIT = Math.max(totalDays * 1.5, 10000); // מגבלה גבוהה מאוד
   let count = 0;
@@ -1168,7 +1120,7 @@ const generateRecurringDatesOptimized = (task, startDate, endDate) => {
         let current = start;
         while (current.isSameOrBefore(end) && count < SAFETY_LIMIT) {
           count++;
-          
+
           if (task.frequencyDetails?.includingFriday !== false || current.day() !== 5) {
             addDateIfValid(current);
           }
@@ -1182,7 +1134,7 @@ const generateRecurringDatesOptimized = (task, startDate, endDate) => {
           let currentDay = start;
           while (currentDay.isSameOrBefore(end) && count < SAFETY_LIMIT) {
             count++;
-            
+
             if (allowedDays.includes(currentDay.day())) {
               addDateIfValid(currentDay);
             }
@@ -1196,7 +1148,7 @@ const generateRecurringDatesOptimized = (task, startDate, endDate) => {
         let monthCursor = start.startOf('month');
         while (monthCursor.isSameOrBefore(end, 'month') && count < SAFETY_LIMIT) {
           count++;
-          
+
           const targetDay = Math.min(dayOfMonth, monthCursor.daysInMonth());
           const date = monthCursor.date(targetDay);
           addDateIfValid(date);
@@ -1205,21 +1157,20 @@ const generateRecurringDatesOptimized = (task, startDate, endDate) => {
         break;
 
       case 'שנתי':
-        // תיקון הבעיה העיקרית של השנה
         const taskCreatedDate = getIsraeliDate(task.createdAt || task.updatedAt || new Date());
-        
-        const targetMonth = task.frequencyDetails?.month ? 
+
+        const targetMonth = task.frequencyDetails?.month ?
           Math.max(0, Math.min(11, task.frequencyDetails.month - 1)) :
           taskCreatedDate.month();
-          
-        const targetDay = task.frequencyDetails?.day ? 
+
+        const targetDay = task.frequencyDetails?.day ?
           Math.max(1, Math.min(31, task.frequencyDetails.day)) :
           taskCreatedDate.date();
-        
+
         let yearCursor = start.startOf('year');
         while (yearCursor.isSameOrBefore(end, 'year') && count < SAFETY_LIMIT) {
           count++;
-          
+
           const yearDate = yearCursor.month(targetMonth);
           const finalDay = Math.min(targetDay, yearDate.daysInMonth());
           const date = yearDate.date(finalDay);
@@ -1245,7 +1196,7 @@ const generateRecurringDatesOptimized = (task, startDate, endDate) => {
 // פונקציה מוטבת לחישוב מפתח תקופה
 const getPeriodKey = (date, periodType) => {
   const israeliDate = getIsraeliDate(date);
-  
+
   switch (periodType) {
     case 'week':
       const weekStart = israeliDate.startOf('isoWeek');
@@ -1288,12 +1239,12 @@ const createSummaryData = (completedTasks, period) => {
 // פונקציה לניקוי cache
 const cleanupCache = () => {
   const MAX_CACHE_SIZE = 5000;
-  
+
   if (taskCompletionCache.size > MAX_CACHE_SIZE) {
     const keysToDelete = Array.from(taskCompletionCache.keys()).slice(0, taskCompletionCache.size - MAX_CACHE_SIZE + 1000);
     keysToDelete.forEach(key => taskCompletionCache.delete(key));
   }
-  
+
   if (dateGenerationCache.size > 1000) {
     const keysToDelete = Array.from(dateGenerationCache.keys()).slice(0, dateGenerationCache.size - 500);
     keysToDelete.forEach(key => dateGenerationCache.delete(key));
@@ -1303,14 +1254,14 @@ const cleanupCache = () => {
 // פונקציה לעיבוד batch של משימות קבועות
 const processBatchRecurringTasks = (tasks, periodStart, periodEnd, batchSize = 20) => {
   const completedRecurringTasks = [];
-  
+
   for (let i = 0; i < tasks.length; i += batchSize) {
     const batch = tasks.slice(i, i + batchSize);
-    
+
     batch.forEach(task => {
       try {
         const possibleDates = generateRecurringDatesOptimized(task, periodStart, periodEnd);
-        
+
         possibleDates.forEach(date => {
           if (isRecurringTaskCompleted(task, date)) {
             completedRecurringTasks.push({
@@ -1329,14 +1280,14 @@ const processBatchRecurringTasks = (tasks, periodStart, periodEnd, batchSize = 2
       }
     });
   }
-  
+
   return completedRecurringTasks;
 };
 
 // הפונקציה הראשית המוטבת
 export const getTasksSummaryByPeriod = async (req, res) => {
   const startTime = Date.now();
-  
+
   try {
     const { period = 'month' } = req.query;
     const userId = req.user.id;
@@ -1356,11 +1307,11 @@ export const getTasksSummaryByPeriod = async (req, res) => {
 
     const convertIdsInFilter = (filter) => {
       const converted = { ...filter };
-      
+
       if (converted.organization) {
         converted.organization = new mongoose.Types.ObjectId(converted.organization);
       }
-      
+
       if (converted.$or) {
         converted.$or = converted.$or.map(cond => {
           const newCond = { ...cond };
@@ -1375,7 +1326,7 @@ export const getTasksSummaryByPeriod = async (req, res) => {
           return newCond;
         });
       }
-      
+
       return converted;
     };
 
@@ -1384,9 +1335,9 @@ export const getTasksSummaryByPeriod = async (req, res) => {
 
     const { start: periodStart, end: periodEnd } = getPeriodRange(period);
 
-    regularFilter.createdAt = regularFilter.createdAt || { 
-      $gte: periodStart, 
-      $lte: periodEnd 
+    regularFilter.createdAt = regularFilter.createdAt || {
+      $gte: periodStart,
+      $lte: periodEnd
     };
 
     // שליפת נתונים מוטבת עם projection מדויק
@@ -1396,10 +1347,10 @@ export const getTasksSummaryByPeriod = async (req, res) => {
         .populate('mainAssignee', 'firstName lastName')
         .populate('assignees', 'firstName lastName')
         .lean(),
-      
-      RecurringTask.find({ 
-        ...recurringFilter, 
-        isDeleted: { $ne: true } 
+
+      RecurringTask.find({
+        ...recurringFilter,
+        isDeleted: { $ne: true }
       })
         .select('taskId frequencyType frequencyDetails notes importance mainAssignee assignees createdAt updatedAt')
         .populate('notes.user', 'firstName lastName userName role')
@@ -1410,8 +1361,8 @@ export const getTasksSummaryByPeriod = async (req, res) => {
 
     // עיבוד משימות קבועות עם batch processing
     const completedRecurringTasks = processBatchRecurringTasks(
-      recurringTasks, 
-      periodStart, 
+      recurringTasks,
+      periodStart,
       periodEnd,
       25 // גודל batch מותאם
     );
@@ -1442,7 +1393,7 @@ export const getTasksSummaryByPeriod = async (req, res) => {
     };
 
     if (overallStats.totalPeriods > 0) {
-      overallStats.averageCompletedTasksPerPeriod = 
+      overallStats.averageCompletedTasksPerPeriod =
         Math.round(overallStats.totalCompletedTasks / overallStats.totalPeriods);
     }
 
@@ -1489,7 +1440,7 @@ export const getTasksSummaryByPeriod = async (req, res) => {
     });
   }
 };
-// 5. סטטיסטיקה אישית לעובד - מעודכן
+// 5. סטטיסטיקה אישית לעובד 
 const calculatePercentage = (achieved, total) => {
   if (total <= 0) return 0;
   const percentage = (achieved / total) * 100;
@@ -1498,7 +1449,7 @@ const calculatePercentage = (achieved, total) => {
 
 // פונקציה להמרת תאריך לאזור זמן ישראל
 const toIsraeliTime = (date) => {
-  return new Date(new Date(date).toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
+  return new Date(new Date(date).toLocaleString("en-US", { timeZone: "Asia/Jerusalem" }));
 };
 
 // פונקציה לקבלת תחילת היום בזמן ישראל
@@ -1519,14 +1470,14 @@ const getEndOfDay1 = (date) => {
 const getLastDailyUpdateFromAssigneeDetails = async (taskId, taskModel, userId, targetDate) => {
   const startOfDay = getStartOfDay1(targetDate);
   const endOfDay = getEndOfDay1(targetDate);
-  
+
   const updates = await TaskAssigneeDetails.find({
     taskId,
     taskModel,
     user: userId,
     updatedAt: { $gte: startOfDay, $lte: endOfDay }
   }).sort({ updatedAt: -1 }).limit(1);
-  
+
   return updates.length > 0 ? updates[0] : null;
 };
 
@@ -1534,12 +1485,12 @@ const getLastDailyUpdateFromAssigneeDetails = async (taskId, taskModel, userId, 
 const getLastDailyUpdateFromNotes = (notes, targetDate) => {
   const startOfDay = getStartOfDay1(targetDate);
   const endOfDay = getEndOfDay1(targetDate);
-  
+
   const dailyNotes = notes.filter(note => {
     const noteDate = new Date(note.date);
     return noteDate >= startOfDay && noteDate <= endOfDay;
   });
-  
+
   // מיון לפי תאריך יורד ולקיחת הראשון (האחרון ביום)
   return dailyNotes.sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
 };
@@ -1549,16 +1500,16 @@ const createDateRange = (startDate, endDate) => {
   const dates = [];
   const current = new Date(startDate);
   const end = new Date(endDate);
-  
+
   // וידוא שאנו מתחילים מתחילת היום
   current.setHours(0, 0, 0, 0);
   end.setHours(0, 0, 0, 0);
-  
+
   while (current <= end) {
     dates.push(new Date(current));
     current.setDate(current.getDate() + 1);
   }
-  
+
   return dates;
 };
 
@@ -1647,7 +1598,7 @@ const processRegularTasksByDays = async (tasks, dateRange, userId) => {
           taskModel: 'Task',
           user: userId
         }).sort({ updatedAt: -1 });
-      
+
         if (lastUpdate && lastUpdate.status === 'הושלם') {
           processedTasks.push({
             ...task.toObject(),
@@ -1660,8 +1611,8 @@ const processRegularTasksByDays = async (tasks, dateRange, userId) => {
           });
         }
       }
-      
-      }
+
+    }
   }
 
   return processedTasks;
@@ -1674,7 +1625,7 @@ export const getEmployeePersonalStats = async (req, res) => {
 
     const taskFilter = buildTaskFilter(req.query);
 
-    let employeesQuery = { role: 'עובד' };
+    let employeesQuery;
     if (req.query.employeeId) {
       employeesQuery._id = req.query.employeeId;
     }
@@ -1682,20 +1633,19 @@ export const getEmployeePersonalStats = async (req, res) => {
     const employees = await User.find(employeesQuery);
 
     // יצירת טווח תאריכים לעיבוד
-// יצירת טווח תאריכים לעיבוד
-let startDate = null;
-let endDate = null;
-let dateRange = null;
+    let startDate = null;
+    let endDate = null;
+    let dateRange = null;
 
-if (req.query.startDate || req.query.endDate) {
-  startDate = req.query.startDate ? new Date(req.query.startDate) : new Date('1970-01-01');
-  endDate = req.query.endDate ? new Date(req.query.endDate) : new Date();
-  dateRange = createDateRange(startDate, endDate);
+    if (req.query.startDate || req.query.endDate) {
+      startDate = req.query.startDate ? new Date(req.query.startDate) : new Date('1970-01-01');
+      endDate = req.query.endDate ? new Date(req.query.endDate) : new Date();
+      dateRange = createDateRange(startDate, endDate);
 
-  console.log("📅 טווח תאריכים:", dateRange.map(d => d.toISOString()));
-} else {
-  console.log("📅 אין סינון תאריכים - מביא את כל המשימות");
-}
+      console.log("טווח תאריכים:", dateRange.map(d => d.toISOString()));
+    } else {
+      console.log(" אין סינון תאריכים - מביא את כל המשימות");
+    }
 
 
     const employeeStats = await Promise.all(employees.map(async (employee) => {
@@ -1759,8 +1709,8 @@ if (req.query.startDate || req.query.endDate) {
         const status = task.isFromNote ? task.noteStatus : task.assigneeStatus;
         const deadline = task.finalDeadline || task.dueDate;
         return deadline &&
-               new Date(deadline) < new Date(task.processedDate) &&
-               status !== 'הושלם';
+          new Date(deadline) < new Date(task.processedDate) &&
+          status !== 'הושלם';
       }).length;
 
       console.log(`👤 ${employee.userName} | סה"כ: ${totalTasks} | הושלמו: ${completedTasks} | באיחור: ${overdueTasks}`);
@@ -1779,8 +1729,8 @@ if (req.query.startDate || req.query.endDate) {
         const achievedCount = allProcessedTasks.filter(task => {
           const status = task.isFromNote ? task.noteStatus : task.assigneeStatus;
           return task.importance === goal.importance &&
-                 (!goal.subImportance || task.subImportance === goal.subImportance) &&
-                 status === 'הושלם';
+            (!goal.subImportance || task.subImportance === goal.subImportance) &&
+            status === 'הושלם';
         }).length;
         console.log(employee.userName)
         console.log(`🎯 יעד (${goal.importance}${goal.subImportance ? ' - ' + goal.subImportance : ''}): `
@@ -1822,11 +1772,11 @@ if (req.query.startDate || req.query.endDate) {
         endDate: endDate?.toISOString() || null,
         totalDays: dateRange?.length || 'כל הזמנים'
       }
-      
+
     });
 
   } catch (error) {
-    console.error('❌ Error in getEmployeePersonalStats:', error);
+    console.error('Error in getEmployeePersonalStats:', error);
     res.status(500).json({
       success: false,
       message: 'שגיאה בשליפת סטטיסטיקות אישיות',
@@ -1834,155 +1784,3 @@ if (req.query.startDate || req.query.endDate) {
     });
   }
 };
-
-
-// export const getEmployeePersonalStats = async (req, res) => {
-//   try {
-//     const userId = req.user.id;
-//     saveUserFilter(userId, 'employeePersonalStats', req.query);
-    
-//     const taskFilter = buildTaskFilter(req.query);
-    
-//     let employeesQuery = { role: 'עובד' };
-//     if (req.query.employeeId) {
-//       employeesQuery._id = req.query.employeeId;
-//     }
-    
-//     const employees = await User.find(employeesQuery);
-    
-//     // יצירת טווח תאריכים לעיבוד
-//     const startDate = req.query.startDate ? new Date(req.query.startDate) : new Date();
-//     const endDate = req.query.endDate ? new Date(req.query.endDate) : new Date();
-//     const dateRange = createDateRange(startDate, endDate);
-    
-//     const employeeStats = await Promise.all(employees.map(async (employee) => {
-//       const empId = employee._id.toString();
-      
-//       const baseFilter = {
-//         ...taskFilter,
-//         $or: [
-//           { creator: empId },
-//           { mainAssignee: empId },
-//           { assignees: { $in: [empId] } }
-//         ]
-//       };
-      
-//       // שליפת משימות רגילות
-//       const regularTasks = await Task.find(baseFilter);
-      
-//       // שליפת משימות קבועות
-//       const recurringTasks = await RecurringTask.find(baseFilter)
-//         .populate('notes.user', 'firstName lastName userName role');
-      
-//       // עיבוד המשימות לפי ימים
-//       const processedRegularTasks = await processRegularTasksByDays(
-//         regularTasks, 
-//         dateRange, 
-//         empId
-//       );
-      
-//       const processedRecurringTasks = await processRecurringTasksByDays(
-//         recurringTasks, 
-//         dateRange, 
-//         empId
-//       );
-//       console.log("משימות קבועות לפי ימים",processedRecurringTasks)
-
-//       // שילוב כל המשימות המעובדות
-//       const allProcessedTasks = [
-//         ...processedRegularTasks,
-//         ...processedRecurringTasks
-//       ];
-      
-//       // חישוב סטטיסטיקות
-//       const totalTasks = allProcessedTasks.length;
-      
-//       const completedTasks = allProcessedTasks.filter(task => {
-//         const status = task.isFromNote ? task.noteStatus : task.assigneeStatus;
-//         return status === 'הושלם';
-//       }).length;
-      
-//       // חישוב משימות שפוגעות בזמנים (לפי finalDeadline או dueDate)
-//       const overdueTasks = allProcessedTasks.filter(task => {
-//         const status = task.isFromNote ? task.noteStatus : task.assigneeStatus;
-//         const deadline = task.finalDeadline || task.dueDate;
-        
-//         return deadline && 
-//                new Date(deadline) < new Date(task.processedDate) && 
-//                status !== 'הושלם';
-//       }).length;
-      
-//       // חישוב אחוזים (מוגבל ל-100%)
-//       const completionRate = calculatePercentage(completedTasks, totalTasks);
-//       const onTimeRate = calculatePercentage(totalTasks - overdueTasks, totalTasks);
-      
-//       // שליפת יעדים אישיים ויעדים כלליים
-//       const personalGoals = await Goal.find({ 
-//         targetType: 'עובד בודד', 
-//         employee: empId 
-//       });
-      
-//       const generalGoals = await Goal.find({ 
-//         targetType: 'כלל העובדים' 
-//       });
-      
-//       // חישוב אחוז עמידה ביעדים (מוגבל ל-100%)
-//       const allGoals = [...personalGoals, ...generalGoals];
-//       let totalGoalTarget = 0;
-//       let totalGoalAchieved = 0;
-      
-//       allGoals.forEach(goal => {
-//         const achievedCount = allProcessedTasks.filter(task => {
-//           const status = task.isFromNote ? task.noteStatus : task.assigneeStatus;
-//           return task.importance === goal.importance &&
-//                  (!goal.subImportance || task.subImportance === goal.subImportance) &&
-//                  status === 'הושלם';
-//         }).length;
-        
-//         totalGoalAchieved += achievedCount;
-//         totalGoalTarget += goal.targetCount;
-//       });
-      
-//       const overallGoalPercentage = calculatePercentage(totalGoalAchieved, totalGoalTarget);
-      
-//       return {
-//         employeeId: empId,
-//         employeeName: `${employee.firstName} ${employee.lastName}`,
-//         userName: employee.userName,
-//         tasksCompleted: completedTasks,
-//         completionRate,
-//         onTimeRate,
-//         goalAchievementRate: overallGoalPercentage,
-//         taskBreakdown: {
-//           regular: processedRegularTasks.length,
-//           recurring: processedRecurringTasks.length,
-//           total: totalTasks
-//         },
-//         details: {
-//           totalGoalTarget,
-//           totalGoalAchieved,
-//           overdueTasks
-//         }
-//       };
-//     }));
-    
-//     res.json({
-//       success: true,
-//       data: employeeStats,
-//       appliedFilters: req.query,
-//       dateRange: {
-//         startDate,
-//         endDate,
-//         totalDays: dateRange.length
-//       }
-//     });
-    
-//   } catch (error) {
-//     console.error('Error in getEmployeePersonalStats:', error);
-//     res.status(500).json({ 
-//       success: false, 
-//       message: 'שגיאה בשליפת סטטיסטיקות אישיות',
-//       error: error.message 
-//     });
-//   }
-// };

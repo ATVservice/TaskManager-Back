@@ -25,6 +25,7 @@
     "moment-timezone": "^0.6.0",
     "mongoose": "^8.16.4",
     "node-cache": "^5.1.2",
+    "node-cron": "^4.2.1",
     "nodemailer": "^7.0.5",
     "pdfkit": "^0.17.1",
     "utc": "^0.1.0"

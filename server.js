@@ -1,8 +1,13 @@
 import app from './src/app.js';
 import mongoose from 'mongoose';
-import cors from 'cors';
 import dotenv from 'dotenv';
+import cron from "node-cron";
+import runDailyUpdate from './src/scripts/runDailyUpdate.js'
 dotenv.config();
+
+cron.schedule("0 23 * * *", () => {  
+  runDailyUpdate();
+});
   
 // התחברות למסד
 
