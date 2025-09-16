@@ -1,13 +1,8 @@
-import mongoose from 'mongoose';
-import { generateAlerts } from '../controllers/alertController.js';
-import dotenv from 'dotenv';
+import { generateAlerts as generateAlertsController } from '../controllers/alertController.js';
 
-dotenv.config();
-
-// להריץ פעם ביום
-mongoose.connect(process.env.LOCAL_URI).then(async () => {
+// פעם ביום
+export async function generateAlerts() {
   console.log('Generating alerts...');
-  await generateAlerts();
+  await generateAlertsController();
   console.log('✅ Alerts done');
-  process.exit();
-});
+}

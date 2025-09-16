@@ -3,11 +3,24 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cron from "node-cron";
 import runDailyUpdate from './src/scripts/runDailyUpdate.js'
+import { generateAlerts } from './src/scripts/generateAlerts.js';
+import { generateWeeklyDrawerSummary } from './src/scripts/generateWeeklyDrawerSummary.js';
+
 dotenv.config();
 
-cron.schedule("10 23 * * *", () => {  
+// 02:00 כל יום
+cron.schedule("0 23 * * *", () => {  
   runDailyUpdate();
 });
+// 02:30 כל יום ראשון
+cron.schedule("30 23 * * 0", () => {  
+  generateWeeklyDrawerSummary();
+});
+// 03:00 כל יום
+cron.schedule("0 0 * * *", () => {  
+  generateAlerts();
+});
+
   
 // התחברות למסד
 

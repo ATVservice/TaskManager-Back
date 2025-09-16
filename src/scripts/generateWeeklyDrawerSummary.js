@@ -1,13 +1,8 @@
-import mongoose from 'mongoose';
-import { generateWeeklyDrawerSummary } from '../controllers/alertController.js';
-import dotenv from 'dotenv';
+import { generateWeeklyDrawerSummary as generateWeeklyDrawerSummaryController } from '../controllers/alertController.js';
 
-dotenv.config();
-
-// להריץ פעם בשבוע
-mongoose.connect(process.env.LOCAL_URI).then(async () => {
-  console.log('Generating alerts...');
-  await generateWeeklyDrawerSummary();
-  console.log('✅ Alerts done');
-  process.exit();
-});
+// פעם בשבוע
+export async function generateWeeklyDrawerSummary() {
+  console.log('Generating weekly drawer summary...');
+  await generateWeeklyDrawerSummaryController();
+  console.log('✅ Weekly drawer summary done');
+}
