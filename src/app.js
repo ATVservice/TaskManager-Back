@@ -22,9 +22,10 @@ dotenv.config();
 const app = express();
 
 const allowedOrigins = [
-  process.env.FRONT_PORT?.trim(),
+  // process.env.FRONT_PORT?.trim(),
   'http://localhost:3000',
-  'https://taskmanager-front-production.up.railway.app' 
+  'taskmanager-front-production.up.railway.app',
+  'https://taskmanager-front-production.up.railway.app'
 ];
 
 console.log("בדיקת שרת - FRONT_PORT:", process.env.FRONT_PORT);
