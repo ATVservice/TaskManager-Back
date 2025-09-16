@@ -20,21 +20,25 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
+
 const allowedOrigins = [
-  console.log("בדיקת שרת",process.env.FRONT_PORT),
-  process.env.FRONT_PORT?.trim(), 
-  'http://localhost:3000'         
+  process.env.FRONT_PORT?.trim(),
+  'http://localhost:3000',
+  'https://taskmanager-front-production.up.railway.app' 
 ];
+
+console.log("בדיקת שרת - FRONT_PORT:", process.env.FRONT_PORT);
+console.log("Allowed origins:", allowedOrigins);
 
 app.use(cors({
   origin: function(origin, callback){
+    console.log("Request origin:", origin); 
     if(!origin) return callback(null, true);
-
-    if(allowedOrigins.indexOf(origin) === -1){
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+    if(allowedOrigins.indexOf(origin) !== -1){
+      return callback(null, true);
     }
-    return callback(null, true);
+    const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+    return callback(new Error(msg), false);
   },
   credentials: true
 }));

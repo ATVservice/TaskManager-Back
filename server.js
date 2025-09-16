@@ -9,7 +9,6 @@ dotenv.config();
 //     origin: process.env.FRONT_PORT, 
 //     credentials: true
 //   }));
-
   
 // התחברות למסד
 mongoose.connect(process.env.LOCAL_URI)
