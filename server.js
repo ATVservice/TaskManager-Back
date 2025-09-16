@@ -5,7 +5,7 @@ import cron from "node-cron";
 import runDailyUpdate from './src/scripts/runDailyUpdate.js'
 dotenv.config();
 
-cron.schedule("0 23 * * *", () => {  
+cron.schedule("10 23 * * *", () => {  
   runDailyUpdate();
 });
   
