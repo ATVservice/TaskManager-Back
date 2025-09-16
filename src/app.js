@@ -19,15 +19,26 @@ import errorHandler from './middleware/errorMiddleware.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
-
 const app = express();
-console.log("בדיקת שרת",process.env.FRONT_PORT)
+const allowedOrigins = [
+  console.log("בדיקת שרת",process.env.FRONT_PORT),
+  process.env.FRONT_PORT?.trim(), 
+  'http://localhost:3000'         
+];
+
 app.use(cors({
-    origin: process.env.FRONT_PORT,
-    credentials: true
-  }));
+  origin: function(origin, callback){
+    if(!origin) return callback(null, true);
+
+    if(allowedOrigins.indexOf(origin) === -1){
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true
+}));
   
-  app.use(express.json());
 app.use(express.json());
 
 app.use('/api/associations', associationRoutes);
@@ -45,8 +56,6 @@ app.use('/api/goal',goalRoutes)
 app.use('/api/report',reportRoutes)
 app.use('/api/adminDashboard',adminDashboardRoutes)
 app.use('/api/project',projectRoutes)
-
-
 
 
 

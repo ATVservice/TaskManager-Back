@@ -4,11 +4,11 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 dotenv.config();
 
-// הרשאות CORS
-app.use(cors({
-    origin: process.env.FRONT_PORT, 
-    credentials: true
-  }));
+// // הרשאות CORS
+// app.use(cors({
+//     origin: process.env.FRONT_PORT, 
+//     credentials: true
+//   }));
 
   
 // התחברות למסד
