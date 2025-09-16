@@ -11,7 +11,9 @@ dotenv.config();
 //   }));
   
 // התחברות למסד
-const URI = process.env.LOCAL_URI || 'mongodb+srv://shlomoavoda:shlomo30@cluster0.5y29qn3.mongodb.net/TaskManager?retryWrites=true&w=majority&appName=Cluster0'
+const dbURI = `${process.env.LOCAL_URI}${process.env.DB_NAME}?retryWrites=true&w=majority&appName=Cluster0`;
+
+const URI = dbURI 
 mongoose.connect(URI)
 .then(() => console.log('Connected to MongoDB 😍'))
 .catch(err => console.log({ error: err.message }));
