@@ -125,7 +125,7 @@ export const forgotPassword = async (req, res) => {
   user.resetTokenExpiry = resetTokenExpiry;
   await user.save();
 
-  const resetLink = `http://localhost:3000/reset-password/${resetToken}`;
+  const resetLink = `${process.env.FRONT_PORT}/reset-password/${resetToken}`;
 
   const htmlContent = `
   <p>שלום,</p>

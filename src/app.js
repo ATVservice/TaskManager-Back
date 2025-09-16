@@ -16,11 +16,13 @@ import reportRoutes from './routes/reportRoutes.js'
 import projectRoutes from './routes/projectRoutes.js'
 import cors from 'cors';
 import errorHandler from './middleware/errorMiddleware.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
 
 const app = express();
 app.use(cors({
-    origin: 'http://localhost:3000',
+    origin: process.env.FRONT_PORT,
     credentials: true
   }));
   
