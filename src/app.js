@@ -21,30 +21,22 @@ dotenv.config();
 
 const app = express();
 
-const allowedOrigins = [
-  // process.env.FRONT_PORT?.trim(),
-  'http://localhost:3000',
-  'taskmanager-front-production.up.railway.app',
-  'https://taskmanager-front-production.up.railway.app'
-];
-
-console.log("בדיקת שרת - FRONT_PORT:", process.env.FRONT_PORT);
-console.log("Allowed origins:", allowedOrigins);
-
 app.use(cors({
-  origin: function(origin, callback){
-    console.log("Request origin:", origin); 
-    if(!origin) return callback(null, true);
-    if(allowedOrigins.indexOf(origin) !== -1){
-      return callback(null, true);
-    }
-    const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-    return callback(new Error(msg), false);
-  },
-  credentials: true
+  origin: [
+    'https://taskmanager-front-production.up.railway.app',
+    'http://localhost:3000'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
   
 app.use(express.json());
+
+app.get('/', (req, res) => {
+  res.send('Server is running');
+});
 
 app.use('/api/associations', associationRoutes);
 app.use('/api/auth', authRoutes);
