@@ -3,17 +3,10 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 dotenv.config();
-
-// // הרשאות CORS
-// app.use(cors({
-//     origin: process.env.FRONT_PORT, 
-//     credentials: true
-//   }));
   
 // התחברות למסד
-const dbURI = `${process.env.LOCAL_URI}${process.env.DB_NAME}?retryWrites=true&w=majority&appName=Cluster0`;
 
-const URI = dbURI 
+const URI = process.env.LOCAL_URI 
 mongoose.connect(URI)
 .then(() => console.log('Connected to MongoDB 😍'))
 .catch(err => console.log({ error: err.message }));
