@@ -16,7 +16,12 @@ import reportRoutes from './routes/reportRoutes.js'
 import projectRoutes from './routes/projectRoutes.js'
 import cors from 'cors';
 import errorHandler from './middleware/errorMiddleware.js';
+import path from "path";
+import { fileURLToPath } from "url";
 import dotenv from 'dotenv';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 dotenv.config();
 
 const app = express();
@@ -56,9 +61,12 @@ app.use('/api/project',projectRoutes)
 
 
 
+app.use(express.static(path.join(__dirname, "../client/build")));
 
 
-
+app.get(/^\/(?!api).*/, (req, res) => {
+  res.sendFile(path.resolve(__dirname, "../client/build", "index.html"));
+});
 
 
 app.use(errorHandler);

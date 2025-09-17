@@ -7,7 +7,7 @@ import { forgotPassword, login, refreshToken, register, resetPassword } from '..
 
 const router = express.Router();
 
-router.post('/register', asyncHandler(register));
+router.post('/register',authMiddleware,requireAdmin, asyncHandler(register));
 router.post('/login', asyncHandler(login));
 router.post('/refreshToken',authMiddleware, asyncHandler(refreshToken));
 router.post('/forgotPassword', asyncHandler(forgotPassword));
