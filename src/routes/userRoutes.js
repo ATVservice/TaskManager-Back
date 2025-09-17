@@ -7,7 +7,7 @@ import { deleteUser, getAllEmployees, getNamesEmployees, getUserNamesEmployees, 
 
 const router = express.Router();
 
-router.put('/updateUser/:id',authMiddleware,requireAdmin, asyncHandler(updateUser));
+router.put('/updateUser/:id',authMiddleware, asyncHandler(updateUser));
 router.delete('/deleteUser/:id',authMiddleware,requireAdmin, asyncHandler(deleteUser));
 router.get('/getAllEmployees',authMiddleware, requireAdmin, asyncHandler(getAllEmployees));
 router.get('/getUserNamesEmployees',authMiddleware, asyncHandler(getUserNamesEmployees));
