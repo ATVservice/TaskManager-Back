@@ -9,8 +9,8 @@ import { generateWeeklyDrawerSummary } from './src/scripts/generateWeeklyDrawerS
 dotenv.config();
 
 // 02:00 כל יום
-// cron.schedule("0 23 * * *", async () => {  
-cron.schedule("*/5 * * * *", async () => {
+cron.schedule("0 23 * * *", async () => {  
+// cron.schedule("*/5 * * * *", async () => {
   try {
     await runDailyUpdate();
     console.log('✅ Scheduled daily update completed');
