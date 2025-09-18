@@ -5,7 +5,7 @@ import { refreshTodayTasks, updateDaysOpen } from '../controllers/todayTasksCont
 
 dotenv.config();
 
-async function run() {
+export async function runDailyUpdate() {
   try {
     console.log('Running daily task sync...');
     
@@ -21,8 +21,5 @@ async function run() {
     console.error('Error:', error);
   } finally {
     await mongoose.connection.close();
-    process.exit(0);
   }
 }
-
-run();
