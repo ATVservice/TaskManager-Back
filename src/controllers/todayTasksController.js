@@ -6,93 +6,98 @@ import dayjs from 'dayjs';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter.js';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore.js';
 import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
+import mongoose from 'mongoose';
+
+// טעינת plugins
 dayjs.extend(utc);
+dayjs.extend(timezone);
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
 
-// export const refreshTodayTasks = async () => {
-//   const today = dayjs().startOf('day').toDate();
-//   const endOfToday = dayjs().endOf('day').toDate();
+export const refreshTodayTasks = async () => {
+  const today = dayjs().startOf('day').toDate();
+  const endOfToday = dayjs().endOf('day').toDate();
 
-//   // 1. ריקון טבלה
-//   await TodayTask.deleteMany({});
+  // 1. ריקון טבלה
+  await TodayTask.deleteMany({});
 
-//   // 2. משימות חד-פעמיות לתאריך היום
-//   const singleTasks = await Task.find({
-//     dueDate: { $gte: today, $lte: endOfToday },
-//     isDeleted: false
-//   }).lean();
+  // 2. משימות חד-פעמיות לתאריך היום
+  const singleTasks = await Task.find({
+    dueDate: { $gte: today, $lte: endOfToday },
+    isDeleted: false
+  }).lean();
 
-//   const recurringTasks = await RecurringTask.find({ isDeleted: false }).lean();
+  const recurringTasks = await RecurringTask.find({ isDeleted: false }).lean();
 
-//   const todayRecurring = recurringTasks.filter(task => {
-//     const now = dayjs();
+  const todayRecurring = recurringTasks.filter(task => {
+    const now = dayjs();
 
-//     switch (task.frequencyType) {
-//       case 'יומי':
-//         return task.frequencyDetails?.includingFriday || now.day() !== 5;
-//       case 'יומי פרטני':
-//         return task.frequencyDetails?.days?.includes(now.day());
-//       case 'חודשי':
-//         return now.date() === task.frequencyDetails?.dayOfMonth;
-//       case 'שנתי':
-//         return now.date() === task.frequencyDetails?.day && now.month() + 1 === task.frequencyDetails?.month;
-//       default:
-//         return false;
-//     }
-//   });
+    switch (task.frequencyType) {
+      case 'יומי':
+        return task.frequencyDetails?.includingFriday || now.day() !== 5;
+      case 'יומי פרטני':
+        return task.frequencyDetails?.days?.includes(now.day());
+      case 'חודשי':
+        return now.date() === task.frequencyDetails?.dayOfMonth;
+      case 'שנתי':
+        return now.date() === task.frequencyDetails?.day && now.month() + 1 === task.frequencyDetails?.month;
+      default:
+        return false;
+    }
+  });
 
-//   // 3. שילוב למשימות להיום
-//   const sanitizeTask = (task, isRecurring) => ({
-//     ...task,
-//     sourceTaskId: task._id,
-//     isRecurringInstance: isRecurring,
-//     project: task.project && task.project !== "" ? task.project : null,
-//     taskModel: isRecurring ? 'RecurringTask' : 'Task',
-//   });
+  // 3. שילוב למשימות להיום
+  const sanitizeTask = (task, isRecurring) => ({
+    ...task,
+    sourceTaskId: task._id,
+    isRecurringInstance: isRecurring,
+    project: task.project && task.project !== "" ? task.project : null,
+    taskModel: isRecurring ? 'RecurringTask' : 'Task',
+  });
 
-//   const allToday = [
-//     ...singleTasks.map(task => sanitizeTask(task, false)),
-//     ...todayRecurring.map(task => sanitizeTask(task, true))
-//   ];
+  const allToday = [
+    ...singleTasks.map(task => sanitizeTask(task, false)),
+    ...todayRecurring.map(task => sanitizeTask(task, true))
+  ];
 
-//   await TodayTask.insertMany(allToday);
-// };
+  await TodayTask.insertMany(allToday);
+};
 // שעון ישראל
-  export const refreshTodayTasks = async () => {
-    // שימוש בשעון ישראל
-    const now = dayjs().tz('Asia/Jerusalem');
-    const today = now.startOf('day').toDate();
-    const endOfToday = now.endOf('day').toDate();
+  // export const refreshTodayTasks = async () => {
+  //   // שימוש בשעון ישראל
+  //   const now = dayjs().tz('Asia/Jerusalem');
+  //   const today = now.startOf('day').toDate();
+  //   const endOfToday = now.endOf('day').toDate();
     
-    // 1. ריקון טבלה
-    await TodayTask.deleteMany({});
+  //   // 1. ריקון טבלה
+  //   await TodayTask.deleteMany({});
     
-    // 2. משימות חד-פעמיות לתאריך היום
-    const singleTasks = await Task.find({
-      dueDate: { $gte: today, $lte: endOfToday },
-      isDeleted: false
-    }).lean();
+  //   // 2. משימות חד-פעמיות לתאריך היום
+  //   const singleTasks = await Task.find({
+  //     dueDate: { $gte: today, $lte: endOfToday },
+  //     isDeleted: false
+  //   }).lean();
     
-    const recurringTasks = await RecurringTask.find({ isDeleted: false }).lean();
-    const todayRecurring = recurringTasks.filter(task => isTaskForToday(task, true));
+  //   const recurringTasks = await RecurringTask.find({ isDeleted: false }).lean();
+  //   const todayRecurring = recurringTasks.filter(task => isTaskForToday(task, true));
     
-    // 3. שילוב למשימות להיום
-    const sanitizeTask = (task, isRecurring) => ({
-      ...task,
-      sourceTaskId: task._id,
-      isRecurringInstance: isRecurring,
-      project: task.project && task.project !== "" ? task.project : null,
-      taskModel: isRecurring ? 'RecurringTask' : 'Task',
-    });
+  //   // 3. שילוב למשימות להיום
+  //   const sanitizeTask = (task, isRecurring) => ({
+  //     ...task,
+  //     sourceTaskId: task._id,
+  //     isRecurringInstance: isRecurring,
+  //     project: task.project && task.project !== "" ? task.project : null,
+  //     taskModel: isRecurring ? 'RecurringTask' : 'Task',
+  //   });
     
-    const allToday = [
-      ...singleTasks.map(task => sanitizeTask(task, false)),
-      ...todayRecurring.map(task => sanitizeTask(task, true))
-    ];
+  //   const allToday = [
+  //     ...singleTasks.map(task => sanitizeTask(task, false)),
+  //     ...todayRecurring.map(task => sanitizeTask(task, true))
+  //   ];
     
-    await TodayTask.insertMany(allToday);
-  };
+  //   await TodayTask.insertMany(allToday);
+  // };
 
 
 export const getTodayTasks = async (req, res) => {
@@ -194,17 +199,47 @@ export const getTodayTasks = async (req, res) => {
   }
 };
 
-// חישוב שדה daysOpen
+
 export const updateDaysOpen = async () => {
   try {
-    const today = dayjs().startOf('day');
+    console.log('🔄 מתחיל עדכון daysOpen...');
+    
+    // בדיקת חיבור
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error('MongoDB לא מחובר');
+    }
+    
+    // זמן נוכחי בישראל
+    const now = dayjs().tz('Asia/Jerusalem');
+    const today = now.startOf('day');
+    
+    console.log(`📅 היום: ${today.format('YYYY-MM-DD HH:mm:ss')} (${today.format()})`);
+    
+    // שאילתה עם timeout מפורש
+    const tasks = await Task.find().maxTimeMS(30000); // 30 שניות timeout
+    console.log(`📋 נמצאו ${tasks.length} משימות`);
+    
+    if (tasks.length === 0) {
+      console.log('אין משימות לעדכן');
+      return;
+    }
 
-    // בוחר רק משימות שלא הושלמו ולא בוטלו
-    const tasks = await Task.find();
-
-    const bulkOps = tasks.map(task => {
-      const created = dayjs(task.createdAt);
-      const daysOpen = today.diff(created, 'day'); // חישוב מספר הימים
+    const bulkOps = tasks.map((task, index) => {
+      // המרה של תאריך היצירה לזמן ישראלי
+      const createdUTC = dayjs.utc(task.createdAt);
+      const createdIsrael = createdUTC.tz('Asia/Jerusalem').startOf('day');
+      const daysOpen = today.diff(createdIsrael, 'day');
+      
+      // דיבוג למשימה הראשונה
+      if (index === 0) {
+        console.log('🔍 דיבוג המשימה הראשונה:');
+        console.log(`   📝 Task ID: ${task._id}`);
+        console.log(`   🌍 createdAt UTC: ${task.createdAt}`);
+        console.log(`   🌍 createdAt parsed UTC: ${createdUTC.format('YYYY-MM-DD HH:mm:ss')}`);
+        console.log(`   🇮🇱 createdAt בישראל: ${createdIsrael.format('YYYY-MM-DD HH:mm:ss')}`);
+        console.log(`   📊 חישוב: ${today.format('YYYY-MM-DD')} - ${createdIsrael.format('YYYY-MM-DD')} = ${daysOpen} ימים`);
+      }
+      
       return {
         updateOne: {
           filter: { _id: task._id },
@@ -213,15 +248,138 @@ export const updateDaysOpen = async () => {
       };
     });
 
-    if (bulkOps.length > 0) {
-      await Task.bulkWrite(bulkOps);
-      console.log(`✅ עדכון daysOpen ל-${bulkOps.length} משימות`);
-    } else {
-      console.log('אין משימות לעדכן');
-    }
+    // ביצוע העדכון
+    const result = await Task.bulkWrite(bulkOps);
+    console.log(`✅ עודכנו ${result.modifiedCount} משימות מתוך ${tasks.length}`);
+    
+    // בדיקה אחרי העדכון
+    const firstTask = await Task.findById(tasks[0]._id);
+    console.log(`🔍 בדיקה: המשימה הראשונה עכשיו עם daysOpen = ${firstTask.daysOpen}`);
+    
   } catch (err) {
-    console.error('שגיאה בעדכון daysOpen:', err);
+    console.error('❌ שגיאה בעדכון daysOpen:', err);
   }
-}
+};
+
+// פונקציה חלופית פשוטה יותר (בלי timezone plugins)
+export const updateDaysOpenSimple = async () => {
+  try {
+    console.log('🔄 מתחיל עדכון daysOpen (גרסה פשוטה)...');
+    
+    // זמן נוכחי + 3 שעות לישראל
+    const israelOffset = 3 * 60; // 3 שעות ב-דקות
+    const now = dayjs().utcOffset(israelOffset);
+    const today = now.startOf('day');
+    
+    console.log(`📅 היום: ${today.format('YYYY-MM-DD HH:mm:ss')}`);
+    
+    const tasks = await Task.find();
+    console.log(`📋 נמצאו ${tasks.length} משימות`);
+    
+    if (tasks.length === 0) {
+      console.log('אין משימות לעדכן');
+      return;
+    }
+
+    const bulkOps = tasks.map((task, index) => {
+      // המרה של תאריך היצירה לזמן ישראלי
+      const created = dayjs(task.createdAt).utcOffset(israelOffset).startOf('day');
+      const daysOpen = today.diff(created, 'day');
+      
+      // דיבוג למשימה הראשונה
+      if (index === 0) {
+        console.log('🔍 דיבוג המשימה הראשונה:');
+        console.log(`   📝 Task ID: ${task._id}`);
+        console.log(`   🌍 createdAt מקורי: ${task.createdAt}`);
+        console.log(`   🇮🇱 createdAt בישראל: ${created.format('YYYY-MM-DD HH:mm:ss')}`);
+        console.log(`   📊 חישוב: ${today.format('YYYY-MM-DD')} - ${created.format('YYYY-MM-DD')} = ${daysOpen} ימים`);
+      }
+      
+      return {
+        updateOne: {
+          filter: { _id: task._id },
+          update: { $set: { daysOpen } },
+        },
+      };
+    });
+
+    const result = await Task.bulkWrite(bulkOps);
+    console.log(`✅ עודכנו ${result.modifiedCount} משימות מתוך ${tasks.length}`);
+    
+  } catch (err) {
+    console.error('❌ שגיאה בעדכון daysOpen:', err);
+  }
+};
+
+// פונקציה לבדיקת חישוב ספציפי
+export const debugSpecificTask = async (taskId) => {
+  try {
+    const task = await Task.findById(taskId);
+    if (!task) {
+      console.log('❌ משימה לא נמצאה');
+      return;
+    }
+    
+    console.log('🔍 ניתוח מפורט של המשימה:');
+    console.log(`📝 Task ID: ${task._id}`);
+    console.log(`🌍 createdAt מקורי: ${task.createdAt}`);
+    console.log(`📊 daysOpen נוכחי: ${task.daysOpen}`);
+    
+    // חישובים שונים
+    const now = new Date();
+    const created = new Date(task.createdAt);
+    
+    console.log('\n📊 חישובים:');
+    console.log(`   JavaScript Date.now(): ${now}`);
+    console.log(`   JavaScript created: ${created}`);
+    console.log(`   הפרש במילישניות: ${now - created}`);
+    console.log(`   הפרש בימים (JavaScript): ${Math.floor((now - created) / (1000 * 60 * 60 * 24))}`);
+    
+    const todayDayjs = dayjs();
+    const createdDayjs = dayjs(task.createdAt);
+    console.log(`   dayjs היום: ${todayDayjs.format()}`);
+    console.log(`   dayjs נוצר: ${createdDayjs.format()}`);
+    console.log(`   dayjs הפרש: ${todayDayjs.diff(createdDayjs, 'day')}`);
+    
+    const todayIsrael = dayjs().utcOffset(180); // +3 שעות
+    const createdIsrael = dayjs(task.createdAt).utcOffset(180);
+    console.log(`   dayjs ישראל היום: ${todayIsrael.format()}`);
+    console.log(`   dayjs ישראל נוצר: ${createdIsrael.format()}`);
+    console.log(`   dayjs ישראל הפרש: ${todayIsrael.diff(createdIsrael, 'day')}`);
+    
+  } catch (err) {
+    console.error('❌ שגיאה בדיבוג:', err);
+  }
+};
+
+// חישוב שדה daysOpen
+// export const updateDaysOpen = async () => {
+//   try {
+//     const today = dayjs().startOf('day');
+
+//     // בוחר רק משימות שלא הושלמו ולא בוטלו
+//     const tasks = await Task.find();
+
+//     const bulkOps = tasks.map(task => {
+//       const created = dayjs(task.createdAt);
+//       const daysOpen = today.diff(created, 'day'); // חישוב מספר הימים
+//       return {
+//         updateOne: {
+//           filter: { _id: task._id },
+//           update: { $set: { daysOpen } },
+//         },
+//       };
+//     });
+
+//     if (bulkOps.length > 0) {
+//       await Task.bulkWrite(bulkOps);
+//       console.log(`✅ עדכון daysOpen ל-${bulkOps.length} משימות`);
+//     } else {
+//       console.log('אין משימות לעדכן');
+//     }
+//   } catch (err) {
+//     console.error('שגיאה בעדכון daysOpen:', err);
+//   }
+// }
 
 

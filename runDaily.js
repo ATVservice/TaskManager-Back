@@ -1,7 +1,7 @@
 // runDaily.js - פשוט ומהיר
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { refreshTodayTasks, updateDaysOpen } from '../controllers/todayTasksController.js';
+import { refreshTodayTasks, updateDaysOpen } from './src/controllers/todayTasksController.js';
 
 dotenv.config();
 
