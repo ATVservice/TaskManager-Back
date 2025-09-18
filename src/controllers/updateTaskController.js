@@ -29,7 +29,7 @@ async function checkAndMarkTaskCompleted(taskId) {
   }
 
   // אם אחד מהמשתמשים הוא מנהל והשלים → מספיק
-  const managerCompleted = await User.exists({ 
+  const managerCompleted = await User.exists({
     _id: { $in: details.filter(d => d.status === 'הושלם').map(d => d.user) },
     role: 'מנהל'
   });
@@ -91,7 +91,6 @@ async function checkAndUnsetTaskCompletedIfNeeded(taskId, changedUserId, newStat
     await Task.findByIdAndUpdate(taskId, { status: 'בטיפול' });
   }
 }
-
 
 export const updateTask = async (req, res) => {
   try {
@@ -232,7 +231,7 @@ export const updateTask = async (req, res) => {
         taskId,
         user: user._id,
         field: fieldNamesMap[field] || field,
-        before: previous ? previous[field] : task[field], 
+        before: previous ? previous[field] : task[field],
         after: newVal,
         date: new Date()
       }));
@@ -330,32 +329,51 @@ export const updateTask = async (req, res) => {
         }
       }
     }
-    const dateFields = ['dueDate', 'finalDeadline'];
-    let dateChanged = false;
+    // בדיקה אם תאריך נדחה (לא רק שונה)
+    // const dateFields = ['dueDate', 'finalDeadline'];
+    // let dateDelayed = false;
 
-    for (const f of dateFields) {
-      const oldVal = task.get(f);
-      const newVal = updates[f];
-      if (newVal && !valuesEqual(oldVal, newVal)) {
-        dateChanged = true;
-        break;
-      }
-    }
+    // for (const f of dateFields) {
+    //   const oldVal = task.get(f);
+    //   const newVal = updates[f];
+    //   if (newVal && !valuesEqual(oldVal, newVal)) {
+    //     const oldDate = oldVal ? new Date(oldVal) : null;
+    //     const newDate = new Date(newVal);
 
-    if (dateChanged) {
-      const failureReason = updates.failureReason;
-      if (!failureReason || (!failureReason.option && !failureReason.customText)) {
-        res.status(400);
-        throw new Error('חובה לספק סיבת שינוי כאשר התאריך משתנה');
-      }
-      if (failureReason.option === 'אחר' && (!failureReason.customText || failureReason.customText.trim() === '')) {
-        res.status(400);
-        throw new Error('חובה למלא פירוט כאשר הסיבה היא "אחר"');
-      }
+    //     // בדיקה אם התאריך החדש מאוחר יותר מהישן (דחייה)
+    //     if (oldDate && newDate > oldDate) {
+    //       dateDelayed = true;
+    //       break;
+    //     }
+    //   }
+    // }
 
-      task.set('failureReason', failureReason);
+    // if (dateDelayed) {
+    //   // קבל את החשיבות הנוכחית (אחרי העדכונים)
+    //   const currentImportance = updates.importance !== undefined ? updates.importance : task.importance;
 
-    }
+    //   const failureReason = updates.failureReason;
+    //   if (!failureReason || (!failureReason.option && !failureReason.customText)) {
+    //     // דרוש סיבת אי ביצוע רק אם זה לא משימת מגירה ורק כשמדחים תאריך
+    //     if (currentImportance !== "מגירה") {
+    //       console.log("@@@current importance", currentImportance, "- date delayed, failure reason required");
+    //       res.status(400);
+    //       throw new Error('חובה לספק סיבת אי ביצוע כאשר מדחים את התאריך');
+    //     }
+    //   }
+
+    //   if (failureReason && failureReason.option === 'אחר' &&
+    //     (!failureReason.customText || failureReason.customText.trim() === '') &&
+    //     currentImportance !== "מגירה") {
+    //     res.status(400);
+    //     throw new Error('חובה למלא פירוט כאשר הסיבה היא "אחר"');
+    //   }
+
+    //   // עדכן את סיבת האי ביצוע רק כשמדחים תאריך (ולא משימת מגירה)
+    //   if (failureReason) {
+    //     task.set('failureReason', failureReason);
+    //   }
+    // }
 
     const importanceChange = changes.find(c => c.field === 'importance');
     if (importanceChange) {

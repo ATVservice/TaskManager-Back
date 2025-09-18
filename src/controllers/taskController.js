@@ -6,6 +6,7 @@ import mongoose, { now } from 'mongoose';
 import dayjs from 'dayjs';
 import TodayTask from '../models/TodayTask.js';
 import TaskAssigneeDetails from '../models/TaskAssigneeDetails.js';
+import { isTaskForToday, addTaskToToday } from '../utils/TaskForToday.js';  
 
 
 export const createTask = async (req, res) => {
@@ -100,16 +101,25 @@ export const createTask = async (req, res) => {
     baseTaskData.subImportance = subImportance;
   }
 
+  let createdTask;
+
   if (isRecurring) {
     const recurringTask = new RecurringTask({
       ...baseTaskData,
       frequencyType,
       frequencyDetails,
     });
-    await recurringTask.save();
+    createdTask = await recurringTask.save();
+    if (isTaskForToday(createdTask, true)) {
+      await addTaskToToday(createdTask, true);
+    }
   } else {
     const task = new Task(baseTaskData);
-    await task.save();
+    createdTask = await task.save();
+
+    if (isTaskForToday(createdTask, false)) {
+      await addTaskToToday(createdTask, false);
+    }
   }
 
   return res.status(201).json({ message: 'משימה נוצרה בהצלחה' });
@@ -125,7 +135,7 @@ export const getTasks = async (req, res) => {
 
   let baseFilter = {
     isDeleted: false,
-    status: { $ne: "בוטלה" }, 
+    status: { $ne: "בוטלה" },
     dueDate: { $gt: today },
     $expr: {
       $not: {

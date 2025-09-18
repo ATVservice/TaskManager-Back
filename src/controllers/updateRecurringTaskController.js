@@ -5,6 +5,9 @@ import User from '../models/User.js';
 import Association from '../models/Association.js';
 import Project from '../models/Project.js';
 import { getTaskPermissionLevel } from '../utils/taskPermissions.js';
+import { isTaskForToday, addTaskToToday  } from '../utils/TaskForToday.js';
+import TodayTask from '../models/TodayTask.js';
+
 
 // בדיקות בסיסיות ללוגיקת תדירות
 function validateFrequency(frequencyType, details) {
@@ -98,6 +101,9 @@ export const updateRecurringTask = async (req, res) => {
     }
 
     const changes = [];
+    const wasTaskForToday = isTaskForToday(task, true);
+
+
 
     // טיפול מיוחד בשינוי סוג תדירות - ניקוי frequencyDetails הישן
     if (updates.frequencyType && updates.frequencyType !== task.frequencyType) {
@@ -107,7 +113,7 @@ export const updateRecurringTask = async (req, res) => {
     }
 
     for (const [field, incomingValRaw] of Object.entries(updates)) {
-      // ❌ לא נוגעים ב־status / notes - הם נשמרים ב-notes/updatesHistory
+      // לא נוגעים ב־status / notes - הם נשמרים ב-notes/updatesHistory
       if (field === 'status' || field === 'statusNote') continue;
 
       let saveVal = incomingValRaw;
@@ -222,6 +228,75 @@ export const updateRecurringTask = async (req, res) => {
     });
 
     await task.save();
+
+    // ---------- עדכון משימות היום לאחר השמירה ----------
+const isTaskForTodayAfterUpdate = isTaskForToday(task, true);
+
+// בדיקה אם יש שינוי ברלוונטיות ליום
+if (wasTaskForToday !== isTaskForTodayAfterUpdate) {
+  console.log(`Task ${taskId} relevance for today changed: ${wasTaskForToday} -> ${isTaskForTodayAfterUpdate}`);
+  
+  if (isTaskForTodayAfterUpdate) {
+    // המשימה צריכה להיות היום - בדוק אם היא כבר קיימת
+    const existingTodayTask = await TodayTask.findOne({ 
+      sourceTaskId: taskId,
+      taskModel: 'RecurringTask'
+    });
+    
+    if (!existingTodayTask) {
+      try {
+        await addTaskToToday(task, true);
+        console.log(`Added recurring task ${taskId} to today tasks`);
+      } catch (error) {
+        console.error(`Failed to add recurring task ${taskId} to today:`, error);
+      }
+    }
+  } else {
+    // המשימה לא צריכה להיות היום - הסר אותה
+    try {
+      const deletedCount = await TodayTask.deleteMany({ 
+        sourceTaskId: taskId,
+        taskModel: 'RecurringTask'
+      });
+      if (deletedCount.deletedCount > 0) {
+        console.log(`Removed recurring task ${taskId} from today tasks (${deletedCount.deletedCount} instances)`);
+      }
+    } catch (error) {
+      console.error(`Failed to remove recurring task ${taskId} from today:`, error);
+    }
+  }
+} else if (isTaskForTodayAfterUpdate) {
+  // המשימה עדיין רלוונטית להיום - עדכן את המשימה ב-TodayTask אם קיימת
+  try {
+    const existingTodayTask = await TodayTask.findOne({ 
+      sourceTaskId: taskId,
+      taskModel: 'RecurringTask'
+    });
+    
+    if (existingTodayTask) {
+      // עדכן את הנתונים במשימת היום
+      const updatedData = {
+        title: task.title,
+        details: task.details,
+        importance: task.importance,
+        subImportance: task.subImportance,
+        mainAssignee: task.mainAssignee,
+        assignees: task.assignees,
+        project: task.project && task.project !== "" ? task.project : null,
+        organization: task.organization
+      };
+      
+      await TodayTask.updateOne(
+        { _id: existingTodayTask._id },
+        { $set: updatedData }
+      );
+      
+      console.log(`Updated recurring task ${taskId} in today tasks`);
+    }
+  } catch (error) {
+    console.error(`Failed to update recurring task ${taskId} in today tasks:`, error);
+  }
+}
 
     // populate fields
     await task.populate('organization');
