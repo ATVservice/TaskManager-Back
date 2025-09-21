@@ -6,8 +6,7 @@ import { softDeleteTask } from '../controllers/deleteTaskController.js';
 const router = express.Router();
 
 
-router.put('/softDeleteTask/:taskId', authMiddleware, asyncHandler(softDeleteTask));
-
+router.put('/softDeleteTask/:taskId/:isTodayTask', authMiddleware, asyncHandler(softDeleteTask));
 
 
 

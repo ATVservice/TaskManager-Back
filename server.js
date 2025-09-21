@@ -20,8 +20,7 @@ mongoose.connect(URI)
   .then(() => {
     console.log('Connected to MongoDB 😍');
 
-    // מפעילים את הקרונים רק אחרי שיש חיבור למסד
-      cron.schedule("0 1 * * *", async () => {
+      cron.schedule("0 2 * * *", async () => {
       try {
         await runDailyUpdate();
         console.log('✅ Scheduled daily update completed');

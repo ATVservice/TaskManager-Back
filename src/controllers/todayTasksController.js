@@ -9,7 +9,6 @@ import utc from 'dayjs/plugin/utc.js';
 import timezone from 'dayjs/plugin/timezone.js';
 import mongoose from 'mongoose';
 
-// טעינת plugins
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isSameOrAfter);
@@ -27,11 +26,10 @@ export const refreshTodayTasks = async () => {
 
   const singleTasks = await Task.find({
     dueDate: { $gte: today, $lte: endOfToday },
-    isDeleted: false
   }).lean();
   console.log(`🔎 Found ${singleTasks.length} single tasks for today`);
 
-  const recurringTasks = await RecurringTask.find({ isDeleted: false }).lean();
+  const recurringTasks = await RecurringTask.find({}).lean();
   console.log(`🔄 Found ${recurringTasks.length} recurring tasks total`);
 
   const todayRecurring = recurringTasks.filter(task => {
@@ -74,104 +72,22 @@ export const refreshTodayTasks = async () => {
   await TodayTask.insertMany(allToday);
 };
 
-// export const refreshTodayTasks = async () => {
-//   const today = dayjs().startOf('day').toDate();
-//   const endOfToday = dayjs().endOf('day').toDate();
-
-//   // 1. ריקון טבלה
-//   await TodayTask.deleteMany({});
-
-//   // 2. משימות חד-פעמיות לתאריך היום
-//   const singleTasks = await Task.find({
-//     dueDate: { $gte: today, $lte: endOfToday },
-//     isDeleted: false
-//   }).lean();
-
-//   const recurringTasks = await RecurringTask.find({ isDeleted: false }).lean();
-
-//   const todayRecurring = recurringTasks.filter(task => {
-//     const now = dayjs();
-
-//     switch (task.frequencyType) {
-//       case 'יומי':
-//         return task.frequencyDetails?.includingFriday || now.day() !== 5;
-//       case 'יומי פרטני':
-//         return task.frequencyDetails?.days?.includes(now.day());
-//       case 'חודשי':
-//         return now.date() === task.frequencyDetails?.dayOfMonth;
-//       case 'שנתי':
-//         return now.date() === task.frequencyDetails?.day && now.month() + 1 === task.frequencyDetails?.month;
-//       default:
-//         return false;
-//     }
-//   });
-
-//   // 3. שילוב למשימות להיום
-//   const sanitizeTask = (task, isRecurring) => ({
-//     ...task,
-//     sourceTaskId: task._id,
-//     isRecurringInstance: isRecurring,
-//     project: task.project && task.project !== "" ? task.project : null,
-//     taskModel: isRecurring ? 'RecurringTask' : 'Task',
-//   });
-
-//   const allToday = [
-//     ...singleTasks.map(task => sanitizeTask(task, false)),
-//     ...todayRecurring.map(task => sanitizeTask(task, true))
-//   ];
-
-//   await TodayTask.insertMany(allToday);
-// };
-// שעון ישראל
-// export const refreshTodayTasks = async () => {
-//   // שימוש בשעון ישראל
-//   const now = dayjs().tz('Asia/Jerusalem');
-//   const today = now.startOf('day').toDate();
-//   const endOfToday = now.endOf('day').toDate();
-
-//   // 1. ריקון טבלה
-//   await TodayTask.deleteMany({});
-
-//   // 2. משימות חד-פעמיות לתאריך היום
-//   const singleTasks = await Task.find({
-//     dueDate: { $gte: today, $lte: endOfToday },
-//     isDeleted: false
-//   }).lean();
-
-//   const recurringTasks = await RecurringTask.find({ isDeleted: false }).lean();
-//   const todayRecurring = recurringTasks.filter(task => isTaskForToday(task, true));
-
-//   // 3. שילוב למשימות להיום
-//   const sanitizeTask = (task, isRecurring) => ({
-//     ...task,
-//     sourceTaskId: task._id,
-//     isRecurringInstance: isRecurring,
-//     project: task.project && task.project !== "" ? task.project : null,
-//     taskModel: isRecurring ? 'RecurringTask' : 'Task',
-//   });
-
-//   const allToday = [
-//     ...singleTasks.map(task => sanitizeTask(task, false)),
-//     ...todayRecurring.map(task => sanitizeTask(task, true))
-//   ];
-
-//   await TodayTask.insertMany(allToday);
-// };
-
-
 export const getTodayTasks = async (req, res) => {
   try {
     const userIdStr = String(req.user._id);
     const isAdmin = req.user.role === 'מנהל';
     const { isRecurringInstance } = req.query;
 
-    const filter = {};
+    const filter = {
+      isDeleted: { $ne: true } 
+    };
     if (!isAdmin) {
       filter.$or = [
         { mainAssignee: req.user._id },
         { assignees: req.user._id },
         { creator: req.user._id },
       ];
+      filter.hiddenFrom = { $ne: req.user._id };
     }
     if (isRecurringInstance === 'true') filter.isRecurringInstance = true;
     else if (isRecurringInstance === 'false') filter.isRecurringInstance = false;
@@ -200,6 +116,10 @@ export const getTodayTasks = async (req, res) => {
             .findById(task.sourceTaskId)
             .select('notes');
 
+            if (recurring?.isDeleted || recurring?.hiddenFrom?.includes(req.user._id)) {
+              return null; 
+            }
+
           const notes = Array.isArray(recurring?.notes) ? recurring.notes : [];
 
           // מסננים רק הערות של היום על ידי המשתמש הנוכחי
@@ -225,6 +145,13 @@ export const getTodayTasks = async (req, res) => {
 
         // --- מקרה 2: משימה רגילה ---
         if (task.taskModel === 'Task' && task.sourceTaskId) {
+          const originalTask = await Task.findById(task.sourceTaskId).select('status statusNote isDeleted hiddenFrom');
+          
+          // בדיקה שהמשימה המקורית לא נמחקה או מוסתרת
+          if (originalTask?.isDeleted || originalTask?.hiddenFrom?.includes(req.user._id)) {
+            return null; // נסנן אותה מהתוצאות
+          }
+
           const tad = await TaskAssigneeDetails.findOne({
             taskId: task.sourceTaskId,
             taskModel: 'Task',
@@ -248,9 +175,11 @@ export const getTodayTasks = async (req, res) => {
         return task;
       })
     );
+    const filteredTasks = updated.filter(task => task !== null);
 
-    console.log('Updated tasks count:', updated.length);
-    res.status(200).json(updated);
+
+    console.log('Updated tasks count:', filteredTasks.length);
+    res.status(200).json(filteredTasks);
 
   } catch (err) {
     console.error('getTodayTasks error:', err);
@@ -410,35 +339,5 @@ export const debugSpecificTask = async (taskId) => {
     console.error('❌ שגיאה בדיבוג:', err);
   }
 };
-
-// חישוב שדה daysOpen
-// export const updateDaysOpen = async () => {
-//   try {
-//     const today = dayjs().startOf('day');
-
-//     // בוחר רק משימות שלא הושלמו ולא בוטלו
-//     const tasks = await Task.find();
-
-//     const bulkOps = tasks.map(task => {
-//       const created = dayjs(task.createdAt);
-//       const daysOpen = today.diff(created, 'day'); // חישוב מספר הימים
-//       return {
-//         updateOne: {
-//           filter: { _id: task._id },
-//           update: { $set: { daysOpen } },
-//         },
-//       };
-//     });
-
-//     if (bulkOps.length > 0) {
-//       await Task.bulkWrite(bulkOps);
-//       console.log(`✅ עדכון daysOpen ל-${bulkOps.length} משימות`);
-//     } else {
-//       console.log('אין משימות לעדכן');
-//     }
-//   } catch (err) {
-//     console.error('שגיאה בעדכון daysOpen:', err);
-//   }
-// }
 
 

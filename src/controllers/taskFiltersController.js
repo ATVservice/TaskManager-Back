@@ -35,6 +35,7 @@ const getBaseFilter = (user) => {
 
     return {
         isDeleted: false,
+        hiddenFrom: { $ne: user._id },
         $or: [
             { mainAssignee: user._id },
             { assignees: user._id },
