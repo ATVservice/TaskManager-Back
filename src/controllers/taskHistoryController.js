@@ -8,11 +8,7 @@ export const getTaskHistory = async (req, res) => {
         const { taskId } = req.params;
         const user = req.user;
 
-
-
         const task = await Task.findById(taskId);
-
-
         if (!task) return res.status(404).json({ message: 'משימה לא נמצאה' });
 
         const permission = getTaskPermissionLevel(task, user);
@@ -20,8 +16,6 @@ export const getTaskHistory = async (req, res) => {
             return res.status(403).json({ message: 'אין לך הרשאה לראות משימה זו' });
           }
           
-
-
         let query = { taskId };
 
         if (permission === 'limited') {

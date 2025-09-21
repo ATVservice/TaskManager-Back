@@ -64,7 +64,7 @@ export const getRecurringTaskHistory = async (req, res) => {
             // אם אין עדכון קודם, נביא מהסטטוס הגלובלי הראשוני של המשימה
             if (!previousStatus) {
                 // אפשר להגדיר ברירת מחדל או לקחת מהמשימה עצמה
-                previousStatus = 'לביצוع'; // ברירת מחדל
+                previousStatus = 'לביצוע'; // ברירת מחדל
             }
 
             // יצירת רשומת היסטוריה עבור שינוי סטטוס
@@ -79,22 +79,6 @@ export const getRecurringTaskHistory = async (req, res) => {
                     field: 'סטטוס',
                     before: previousStatus,
                     after: note.status,
-                    date: note.date
-                });
-            }
-
-            // יצירת רשומת היסטוריה עבור הערה (אם קיימת)
-            if (note.content && note.content.trim()) {
-                notesAsHistory.push({
-                    _id: `note_content_${note._id || i}`,
-                    taskId,
-                    user: {
-                        _id: note.user,
-                        userName: note.user?.userName || 'לא ידוע' // יצטרך populate
-                    },
-                    field: 'הערה סטטוס',
-                    before: null, // הערות בדרך כלל לא מחליפות ערך קודם
-                    after: note.content,
                     date: note.date
                 });
             }

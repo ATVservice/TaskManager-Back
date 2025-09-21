@@ -2,10 +2,7 @@ import RecurringTask from "../models/RecurringTask.js";
 
 export const completeRecurringTask = async (req, res) => {
   const { taskId } = req.params;
-  console.log("#####taskId", taskId);
   const { status, content } = req.body;
-  console.log("#####status", status);
-  console.log("#####content", content);
 
   const userId = req.user._id;
   const recurring = await RecurringTask.findById(taskId);
