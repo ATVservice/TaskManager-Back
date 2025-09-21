@@ -14,6 +14,8 @@ import alertRoutes from './routes/alertRoutes.js'
 import goalRoutes from './routes/goalRoutes.js'
 import reportRoutes from './routes/reportRoutes.js'
 import projectRoutes from './routes/projectRoutes.js'
+import commentRoutes  from './routes/commentRoutes.js';
+
 import cors from 'cors';
 import errorHandler from './middleware/errorMiddleware.js';
 import path from "path";
@@ -58,6 +60,9 @@ app.use('/api/goal',goalRoutes)
 app.use('/api/report',reportRoutes)
 app.use('/api/adminDashboard',adminDashboardRoutes)
 app.use('/api/project',projectRoutes)
+app.use('/api/comment',commentRoutes)
+
+
 
 
 

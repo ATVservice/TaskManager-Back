@@ -61,7 +61,11 @@ const taskSchema = new mongoose.Schema({
 
   mainAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   assignees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }],
-
+  comments: [{
+    content: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
+  }],
   updatesHistory: [{
     date: Date,
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

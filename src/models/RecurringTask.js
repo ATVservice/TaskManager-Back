@@ -51,7 +51,12 @@ const recurringTaskSchema = new mongoose.Schema({
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     status: { type: String, enum: ['לביצוע', 'הושלם', 'בטיפול', 'בוטלה'], required: true },
     content: { type: String }
-  }],  
+  }], 
+  comments: [{
+    content: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
+  }], 
   updatesHistory: [{
     date: Date,
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
