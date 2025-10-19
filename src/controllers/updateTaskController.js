@@ -192,7 +192,7 @@ export const updateTask = async (req, res) => {
 
     // ---------- limited-permission branch (personal updates only) ----------
     if (permission === 'limited') {
-      const allowed = ['status', 'statusNote'];
+      const allowed = ['status', 'statusNote','finalDeadline','dueDate' ];
       const personalUpdates = {};
       for (const field of allowed) {
         if (updates[field] !== undefined) personalUpdates[field] = updates[field];
