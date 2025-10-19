@@ -9,6 +9,7 @@ import { generateWeeklyDrawerSummary } from './src/scripts/generateWeeklyDrawerS
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc.js';
 import timezone from 'dayjs/plugin/timezone.js';
+import { populateDelayedTasks } from './src/controllers/overdueTasksController.js';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -17,10 +18,12 @@ dotenv.config();
 const URI = process.env.LOCAL_URI;
 
 mongoose.connect(URI)
-  .then(() => {
+  .then(async () => {
     console.log('Connected to MongoDB 😍');
+    await populateDelayedTasks();
+    mongoose.disconnect();
 
-      cron.schedule("0 2 * * *", async () => {
+    cron.schedule("0 2 * * *", async () => {
       try {
         await runDailyUpdate();
         console.log('✅ Scheduled daily update completed');

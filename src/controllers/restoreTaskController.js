@@ -22,6 +22,7 @@ const getDeletedEntities = async (Model, userId, isAdmin) => {
     return Model.find(query)
         .populate('organization', 'name')      
         .populate('mainAssignee', 'userName');  
+        
 };
 
 export const getAllDeletedTasks = async (req, res) => {

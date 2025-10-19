@@ -6,7 +6,7 @@ import mongoose, { now } from 'mongoose';
 import dayjs from 'dayjs';
 import TodayTask from '../models/TodayTask.js';
 import TaskAssigneeDetails from '../models/TaskAssigneeDetails.js';
-import { isTaskForToday, addTaskToToday } from '../utils/TaskForToday.js';  
+import { isTaskForToday, addTaskToToday } from '../utils/TaskForToday.js';
 
 
 export const createTask = async (req, res) => {
@@ -305,6 +305,30 @@ export const duplicateTask = async (req, res) => {
 
 
 };
+export const getTaskById = async (req, res) => {
+  const { taskId } = req.params;
+
+  if (!taskId) {
+    res.status(400);
+    throw new Error("לא התקבל קוד משימה");
+  }
+
+  // חיפוש ראשון ב-Task רגיל
+  let task = await Task.findOne({ taskId: taskId })
+    .lean();
+
+  if (!task) {
+    task = await RecurringTask.findOne({ taskId: taskId })
+      .lean();
+  }
+
+  if (!task) {
+    res.status(404);
+    throw new Error("משימה לא נמצאה");
+  }
+
+  res.json(task);
+}
 
 
 

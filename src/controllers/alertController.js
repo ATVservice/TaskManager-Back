@@ -82,7 +82,7 @@ export const generateAlerts = async () => {
 
     const longUncompletedOnceTasks = await Task.find({
         isRecurringInstance: false,
-        status: { $ne: 'הושלמה' },
+        status: { $ne: 'הושלם' },
         createdAt: { $lt: thirtyDaysAgo },
         isDeleted: false
     });

@@ -101,6 +101,11 @@ export const updateTask = async (req, res) => {
     // ---------- parse body (support preparedForm wrapper) ----------
     const rawBody = req.body || {};
     const updates = rawBody.preparedForm ? rawBody.preparedForm : rawBody;
+    // התעלמות משדה "model" אם מגיע מהפרונט
+    if ('model' in updates) {
+      delete updates.model;
+    }
+
 
     // ---------- fetch task ----------
     const task = await Task.findById(taskId);
