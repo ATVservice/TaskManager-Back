@@ -20,8 +20,8 @@ const URI = process.env.LOCAL_URI;
 mongoose.connect(URI)
   .then(async () => {
     console.log('Connected to MongoDB 😍');
-    await populateDelayedTasks();
-    mongoose.disconnect();
+    // await populateDelayedTasks();
+    // mongoose.disconnect();
 
     cron.schedule("0 2 * * *", async () => {
       try {
