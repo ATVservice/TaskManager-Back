@@ -23,7 +23,7 @@ mongoose.connect(URI)
     // await populateDelayedTasks();
     // mongoose.disconnect();
 
-    cron.schedule("0 2 * * *", async () => {
+    cron.schedule("30 8 * * *", async () => {
       try {
         await runDailyUpdate();
         console.log('✅ Scheduled daily update completed');

@@ -62,7 +62,9 @@ export const detectOverdueTasks = async () => {
                     organization: task.organization?._id || task.organization || null,
                     status: "pending",
                     date: now.toDate(),
+                    taskNumber: task.taskId,
                 });
+
 
                 console.log(`⏰ Added delayed recurring task: ${task.title} for ${user.name || user._id}`);
             }
