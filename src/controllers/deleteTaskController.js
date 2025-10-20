@@ -123,67 +123,210 @@ const handleSoftDelete = async ({ entity, entityType, userId, isAdmin, isCreator
 // אם מוחקים ממשימות להיום לא נמחק מהמופע המקורי אלא אם כן הוא מחק משם
 // כלומר לדוגמא מחק משימה קבועה אז היא כן נמחקת וגם המופע שלה להיום נמחק אבל לא הפוך
 // אם זה לא ראשי/מנהל/יוצר מוסתר רק למשתמש עצמו
+// export const softDeleteTask = async (req, res) => {
+//     const taskId = req.params.taskId;
+//     const isTodayTask = req.params.isTodayTask === 'true'; 
+//     const userId = req.user.id;
+//     const userRole = req.user.role;
+//     const password = req.body.password;
+
+
+//     const isValidPassword = await validatePassword(userId, password);
+//     if (!isValidPassword) {
+//         console.log(` סיסמה שגויה`);
+//         res.status(401);
+//         throw new Error('סיסמה שגויה');
+//     }
+
+//     const isAdmin = userRole === 'מנהל';
+
+//     // אם isTodayTask=true, חפש רק TodayTask
+//     if (isTodayTask) {
+//         const entity = await TodayTask.findById(taskId);
+        
+//         if (!entity) {
+//             res.status(404);
+//             throw new Error('משימה לא נמצאה');
+//         }
+
+//         const isCreator = entity.creator?.toString() === userId;
+//         const isMainAssignee = entity.mainAssignee?.toString() === userId;
+//         const isAssignee = entity.assignees?.some(u => u.toString() === userId) && !isMainAssignee;
+        
+//         // מחק רק את TodayTask - לא נוגע ב-RecurringTask המקורי
+//         return await handleSoftDelete({ 
+//             entity, 
+//             entityType: 'TodayTask', 
+//             userId, 
+//             isAdmin, 
+//             isCreator, 
+//             isAssignee, 
+//             isMainAssignee, 
+//             res,
+//             skipSourceUpdate: true 
+//         });
+//     }
+
+//     let entity = await Task.findById(taskId);
+//     if (entity) {
+//         const isCreator = entity.creator?.toString() === userId;
+//         const isMainAssignee = entity.mainAssignee?.toString() === userId;
+//         const isAssignee = entity.assignees?.some(u => u.toString() === userId) && !isMainAssignee;
+//         return await handleSoftDelete({ entity, entityType: 'Task', userId, isAdmin, isCreator, isAssignee, isMainAssignee, res });
+//     }
+
+//     entity = await RecurringTask.findById(taskId);
+//     if (entity) {
+
+//         const isCreator = entity.creator?.toString() === userId;
+//         const isMainAssignee = entity.mainAssignee?.toString() === userId;
+//         const isAssignee = entity.assignees?.some(u => u.toString() === userId) && !isMainAssignee;
+//         console.log(`🔍 RecurringTask permissions:`, { isCreator, isMainAssignee, isAssignee });
+        
+//         return await handleSoftDelete({ entity, entityType: 'RecurringTask', userId, isAdmin, isCreator, isAssignee, isMainAssignee, res });
+//     }
+
+//     entity = await TodayTask.findById(taskId);
+//     if (entity) {
+//         const isCreator = entity.creator?.toString() === userId;
+//         const isMainAssignee = entity.mainAssignee?.toString() === userId;
+//         const isAssignee = entity.assignees?.some(u => u.toString() === userId) && !isMainAssignee;
+        
+//         // אם זה TodayTask ממשימה קבועה ו-isTodayTask=false, מחק גם את המקור
+//         if (entity.taskModel === 'RecurringTask' && entity.sourceTaskId) {
+            
+//             const sourceRecurring = await RecurringTask.findById(entity.sourceTaskId);
+//             if (sourceRecurring) {
+//                 const recurringIsCreator = sourceRecurring.creator?.toString() === userId;
+//                 const recurringIsMainAssignee = sourceRecurring.mainAssignee?.toString() === userId;
+//                 const recurringIsAssignee = sourceRecurring.assignees?.some(u => u.toString() === userId) && !recurringIsMainAssignee;
+                
+//                 // מחק את RecurringTask (זה יעדכן אוטומטית את כל TodayTask הקשורים)
+//                 return await handleSoftDelete({ 
+//                     entity: sourceRecurring, 
+//                     entityType: 'RecurringTask', 
+//                     userId, 
+//                     isAdmin, 
+//                     isCreator: recurringIsCreator,
+//                     isAssignee: recurringIsAssignee, 
+//                     isMainAssignee: recurringIsMainAssignee, 
+//                     res
+//                 });
+//             }
+//         }
+        
+//         // עבור TodayTask רגיל (לא ממשימה קבועה)
+//         return await handleSoftDelete({ entity, entityType: 'TodayTask', userId, isAdmin, isCreator, isAssignee, isMainAssignee, res });
+//     }
+
+//     // לא נמצאה משימה
+//     console.log(` לא נמצאה משימה עם ID: ${taskId}`);
+//     res.status(404);
+//     throw new Error('משימה לא נמצאה');
+// };
+
+// מה שעכשיו שיניתי מהפונקציה שבההערה-
+// משימה רגילה שנמחקת ממשימות להיום כן מועברת לסל מחזור
+// משימה להיום קבועה רק נמחקות ממשימות להיום ולא נמחקת ממשימות קבועות כלומר ימשיך לתזמן
 export const softDeleteTask = async (req, res) => {
     const taskId = req.params.taskId;
-    const isTodayTask = req.params.isTodayTask === 'true'; 
+    const isTodayTask = req.params.isTodayTask === 'true';
     const userId = req.user.id;
     const userRole = req.user.role;
     const password = req.body.password;
 
-
     const isValidPassword = await validatePassword(userId, password);
     if (!isValidPassword) {
-        console.log(` סיסמה שגויה`);
         res.status(401);
         throw new Error('סיסמה שגויה');
     }
 
     const isAdmin = userRole === 'מנהל';
 
-    // אם isTodayTask=true, חפש רק TodayTask
+    // ✅ אם isTodayTask=true — מוחקים גם את המקור
     if (isTodayTask) {
-        const entity = await TodayTask.findById(taskId);
-        
-        if (!entity) {
+        const todayEntity = await TodayTask.findById(taskId);
+        if (!todayEntity) {
             res.status(404);
             throw new Error('משימה לא נמצאה');
         }
 
-        const isCreator = entity.creator?.toString() === userId;
-        const isMainAssignee = entity.mainAssignee?.toString() === userId;
-        const isAssignee = entity.assignees?.some(u => u.toString() === userId) && !isMainAssignee;
-        
-        // מחק רק את TodayTask - לא נוגע ב-RecurringTask המקורי
-        return await handleSoftDelete({ 
-            entity, 
-            entityType: 'TodayTask', 
-            userId, 
-            isAdmin, 
-            isCreator, 
-            isAssignee, 
-            isMainAssignee, 
+        const isCreator = todayEntity.creator?.toString() === userId;
+        const isMainAssignee = todayEntity.mainAssignee?.toString() === userId;
+        const isAssignee = todayEntity.assignees?.some(u => u.toString() === userId) && !isMainAssignee;
+
+        // ✳️ שלב ראשון: מחיקת המשימה להיום (כמו קודם)
+        await handleSoftDelete({
+            entity: todayEntity,
+            entityType: 'TodayTask',
+            userId,
+            isAdmin,
+            isCreator,
+            isAssignee,
+            isMainAssignee,
             res,
-            skipSourceUpdate: true 
+            skipSourceUpdate: false // לא מדלגים, כי נרצה למחוק את המקור בהמשך
         });
+
+        // ✳️ שלב שני: אם יש מקור — מחיקה רכה גם לו
+        if (todayEntity.sourceTaskId && todayEntity.taskModel) {
+            const sourceModel = todayEntity.taskModel === 'RecurringTask' ? RecurringTask : Task;
+            const sourceEntity = await sourceModel.findById(todayEntity.sourceTaskId);
+
+            if (sourceEntity) {
+                const sourceIsCreator = sourceEntity.creator?.toString() === userId;
+                const sourceIsMainAssignee = sourceEntity.mainAssignee?.toString() === userId;
+                const sourceIsAssignee = sourceEntity.assignees?.some(u => u.toString() === userId) && !sourceIsMainAssignee;
+
+                await handleSoftDelete({
+                    entity: sourceEntity,
+                    entityType: todayEntity.taskModel,
+                    userId,
+                    isAdmin,
+                    isCreator: sourceIsCreator,
+                    isAssignee: sourceIsAssignee,
+                    isMainAssignee: sourceIsMainAssignee,
+                    res
+                });
+            }
+        }
+
+        return res.json({ message: "המשימה נמחקה (כולל המקור) בהצלחה!" });
     }
 
+    // ✅ אם isTodayTask=false — התנהגות רגילה כמו קודם
     let entity = await Task.findById(taskId);
     if (entity) {
         const isCreator = entity.creator?.toString() === userId;
         const isMainAssignee = entity.mainAssignee?.toString() === userId;
         const isAssignee = entity.assignees?.some(u => u.toString() === userId) && !isMainAssignee;
-        return await handleSoftDelete({ entity, entityType: 'Task', userId, isAdmin, isCreator, isAssignee, isMainAssignee, res });
+        return await handleSoftDelete({
+            entity,
+            entityType: 'Task',
+            userId,
+            isAdmin,
+            isCreator,
+            isAssignee,
+            isMainAssignee,
+            res
+        });
     }
 
     entity = await RecurringTask.findById(taskId);
     if (entity) {
-
         const isCreator = entity.creator?.toString() === userId;
         const isMainAssignee = entity.mainAssignee?.toString() === userId;
         const isAssignee = entity.assignees?.some(u => u.toString() === userId) && !isMainAssignee;
-        console.log(`🔍 RecurringTask permissions:`, { isCreator, isMainAssignee, isAssignee });
-        
-        return await handleSoftDelete({ entity, entityType: 'RecurringTask', userId, isAdmin, isCreator, isAssignee, isMainAssignee, res });
+        return await handleSoftDelete({
+            entity,
+            entityType: 'RecurringTask',
+            userId,
+            isAdmin,
+            isCreator,
+            isAssignee,
+            isMainAssignee,
+            res
+        });
     }
 
     entity = await TodayTask.findById(taskId);
@@ -191,36 +334,38 @@ export const softDeleteTask = async (req, res) => {
         const isCreator = entity.creator?.toString() === userId;
         const isMainAssignee = entity.mainAssignee?.toString() === userId;
         const isAssignee = entity.assignees?.some(u => u.toString() === userId) && !isMainAssignee;
-        
-        // אם זה TodayTask ממשימה קבועה ו-isTodayTask=false, מחק גם את המקור
+
         if (entity.taskModel === 'RecurringTask' && entity.sourceTaskId) {
-            
             const sourceRecurring = await RecurringTask.findById(entity.sourceTaskId);
             if (sourceRecurring) {
                 const recurringIsCreator = sourceRecurring.creator?.toString() === userId;
                 const recurringIsMainAssignee = sourceRecurring.mainAssignee?.toString() === userId;
                 const recurringIsAssignee = sourceRecurring.assignees?.some(u => u.toString() === userId) && !recurringIsMainAssignee;
-                
-                // מחק את RecurringTask (זה יעדכן אוטומטית את כל TodayTask הקשורים)
-                return await handleSoftDelete({ 
-                    entity: sourceRecurring, 
-                    entityType: 'RecurringTask', 
-                    userId, 
-                    isAdmin, 
+                return await handleSoftDelete({
+                    entity: sourceRecurring,
+                    entityType: 'RecurringTask',
+                    userId,
+                    isAdmin,
                     isCreator: recurringIsCreator,
-                    isAssignee: recurringIsAssignee, 
-                    isMainAssignee: recurringIsMainAssignee, 
+                    isAssignee: recurringIsAssignee,
+                    isMainAssignee: recurringIsMainAssignee,
                     res
                 });
             }
         }
-        
-        // עבור TodayTask רגיל (לא ממשימה קבועה)
-        return await handleSoftDelete({ entity, entityType: 'TodayTask', userId, isAdmin, isCreator, isAssignee, isMainAssignee, res });
+
+        return await handleSoftDelete({
+            entity,
+            entityType: 'TodayTask',
+            userId,
+            isAdmin,
+            isCreator,
+            isAssignee,
+            isMainAssignee,
+            res
+        });
     }
 
-    // לא נמצאה משימה
-    console.log(` לא נמצאה משימה עם ID: ${taskId}`);
     res.status(404);
     throw new Error('משימה לא נמצאה');
 };

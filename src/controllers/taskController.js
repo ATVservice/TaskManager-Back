@@ -197,7 +197,7 @@ export const getMoreDetails = async (req, res) => {
 
   // חיפוש קודם כל ב-Task
   let task = await Task.findOne({ _id })
-    .select('assignees importance subImportance creator dueDate finalDeadline daysOpen createdAt project details mainAssignee failureReason')
+    // .select('title taskId assignees importance subImportance creator dueDate finalDeadline daysOpen createdAt project details mainAssignee failureReason updatedAt')
     .populate('assignees', 'userName')
     .populate('creator', 'userName')
     .populate('mainAssignee', 'userName')
@@ -210,7 +210,7 @@ export const getMoreDetails = async (req, res) => {
   // אם לא נמצא, חפש ב-RecurringTask
   if (!task) {
     task = await RecurringTask.findOne({ _id })
-      .select('assignees importance subImportance creator daysOpen createdAt project details mainAssignee frequencyType frequencyDetails statusNote notes')
+      // .select('assignees failureReason organization cancelReason status importance subImportance creator daysOpen createdAt project details mainAssignee frequencyType frequencyDetails statusNote notes isRecurringInstance isDeleted')
       .populate('assignees', 'userName')
       .populate('creator', 'userName')
       .populate('mainAssignee', 'userName')

@@ -12,63 +12,197 @@ import { updateRecurringTask } from './updateRecurringTaskController.js'
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-
 export const detectOverdueTasks = async () => {
     const now = dayjs().tz("Asia/Jerusalem");
     const todayStart = now.startOf("day").toDate();
     const todayEnd = now.endOf("day").toDate();
 
-    console.log(`🌙 Checking overdue recurring tasks for ${now.format("YYYY-MM-DD")}`);
+    console.log(`🌙 Checking overdue tasks for ${now.format("YYYY-MM-DD")}`);
 
-    // 1️⃣ שליפת משימות קבועות שעדיין פעילות
-    const recurringTasks = await RecurringTask.find({
+    // 🟢 שליפה של כל המשימות להיום (רגילות + קבועות)
+    const todayTasks = await TodayTask.find({
+        date: { $gte: todayStart, $lte: todayEnd },
         status: { $nin: ["הושלם", "בוטלה"] },
-        isDeleted: false,
     })
-        .populate("assignees organization")
+        .populate("taskId") // המשימה המקורית
+        .populate("mainAssignee assignees organization")
         .lean();
 
-    for (const task of recurringTasks) {
-        // 2️⃣ סינון ה-notes של היום (מתוך המשימה עצמה)
-        const notesToday = (task.notes || []).filter(
-            (n) => n.date >= todayStart && n.date <= todayEnd
-        );
+    console.log(`🔎 Found ${todayTasks.length} TodayTasks for today`);
 
-        // 3️⃣ עובדים שסיימו היום
-        const completedUsers = notesToday
-            .filter((n) => n.status === "הושלם")
-            .map((n) => n.user?.toString());
+    for (const todayTask of todayTasks) {
+        const originalTask = todayTask.taskId;
+        if (!originalTask) continue;
 
-        // 4️⃣ עובדים שלא השלימו
+        // 🧩 איסוף כל העובדים במשימה
+        const allAssignees = (todayTask.assignees || []).map(a => a._id.toString());
 
-        const delayedUsers = (task.assignees || []).filter(
-            (user) => !completedUsers.includes(user._id.toString())
-        );
-        // 5️⃣ יצירת רשומות DelayedTask רק למי שעדיין לא השלימו
-        if (delayedUsers.length > 0) {
-            await DelayedTask.deleteMany({
-                taskNumber: task.taskId,
-                taskModel: "RecurringTask",
-            });
+        // 🧩 שליפת עובדים שהשלימו מתוך TaskAssigneeDetails
+        const completedDetails = await TaskAssigneeDetails.find({
+            taskId: todayTask.taskId,
+            taskModel: todayTask.taskModel,
+            status: "הושלם",
+        }).lean();
 
-            await DelayedTask.create({
-                taskId: task._id,
-                taskNumber: task.taskId,
-                taskModel: "RecurringTask",
-                assignedTo: delayedUsers.map(u => u._id),
-                mainAssignee: task.mainAssignee?._id || null,
-                organization: task.organization?._id || task.organization || null,
-                title: task.title || "ללא כותרת",
-                overdueSince: now.toDate(),
-                status: "pending",
-            });
+        const completedAssignees = completedDetails.map(d => d.user.toString());
 
-            console.log(`⏰ Added delayed recurring task: ${task.title} (${delayedUsers.length} delayed users)`);
+        // ✋ סינון העובדים שעוד לא השלימו
+        const pendingAssignees = allAssignees.filter(a => !completedAssignees.includes(a));
+
+        // אם כולם סיימו – ממשיכים הלאה
+        if (pendingAssignees.length === 0) continue;
+
+        // 🧹 מחיקה של DelayedTask קיים עם אותו taskNumber (אם יש)
+        if (todayTask.taskNumber) {
+            const existingDelayed = await DelayedTask.findOne({ taskNumber: todayTask.taskNumber });
+            if (existingDelayed) {
+                await DelayedTask.deleteOne({ _id: existingDelayed._id });
+                console.log(`🗑️ נמחקה משימה ישנה עם אותו taskNumber (${todayTask.taskNumber})`);
+            }
         }
+
+        // 🆕 יצירה חדשה ב־DelayedTasks
+        await DelayedTask.create({
+            taskId: todayTask.taskId,
+            taskNumber: todayTask.taskNumber || originalTask.taskNumber || 0,
+            taskModel: todayTask.taskModel,
+            title: todayTask.title || originalTask.title || "ללא כותרת",
+            mainAssignee: todayTask.mainAssignee?._id || originalTask.mainAssignee?._id || null,
+            organization: todayTask.organization?._id || originalTask.organization?._id || null,
+            assignedTo: pendingAssignees,
+            overdueSince: now.toDate(),
+            status: "pending",
+        });
+
+        console.log(`⏰ Added/Updated delayed task: ${todayTask.title || originalTask.title} (${pendingAssignees.length} pending users)`);
     }
 
-    console.log("✅ Finished checking overdue recurring tasks");
+    console.log("✅ Finished checking overdue tasks for TodayTask");
 };
+// export const detectOverdueTasks = async () => {
+//     const now = dayjs().tz("Asia/Jerusalem");
+//     const todayStart = now.startOf("day").toDate();
+//     const todayEnd = now.endOf("day").toDate();
+
+//     console.log(`🌙 Checking overdue tasks for ${now.format("YYYY-MM-DD")}`);
+
+//     // 🟢 שליפה של כל המשימות להיום (רגילות + קבועות)
+//     const todayTasks = await TodayTask.find({
+//         date: { $gte: todayStart, $lte: todayEnd },
+//         status: { $nin: ["הושלם", "בוטלה"] },
+//     })
+//         .populate("taskId") // המשימה המקורית
+//         .populate("mainAssignee assignees organization")
+//         .lean();
+
+//     console.log(`🔎 Found ${todayTasks.length} TodayTasks for today`);
+
+//     for (const todayTask of todayTasks) {
+//         const originalTask = todayTask.taskId;
+//         if (!originalTask) continue;
+
+//         // 🧩 איסוף כל העובדים במשימה
+//         const allAssignees = (todayTask.assignees || []).map(a => a._id.toString());
+
+//         // 🧩 שליפת עובדים שהשלימו מתוך TaskAssigneeDetails
+//         const completedDetails = await TaskAssigneeDetails.find({
+//             taskId: todayTask.taskId,
+//             taskModel: todayTask.taskModel,
+//             status: "הושלם",
+//         }).lean();
+
+//         const completedAssignees = completedDetails.map(d => d.user.toString());
+
+//         // ✋ סינון העובדים שעוד לא השלימו
+//         const pendingAssignees = allAssignees.filter(a => !completedAssignees.includes(a));
+
+//         // אם כולם סיימו – ממשיכים הלאה
+//         if (pendingAssignees.length === 0) continue;
+
+//         // 🧹 מחיקת משימה קיימת ב־DelayedTasks (אם קיימת)
+//         await DelayedTask.deleteMany({
+//             taskId: todayTask.taskId,
+//             taskModel: todayTask.taskModel,
+//         });
+
+//         // 🆕 יצירה חדשה ב־DelayedTasks
+//         await DelayedTask.create({
+//             taskId: todayTask.taskId,
+//             taskNumber: todayTask.taskNumber || originalTask.taskId || 0,
+//             taskModel: todayTask.taskModel,
+//             title: todayTask.title || originalTask.title || "ללא כותרת",
+//             mainAssignee: todayTask.mainAssignee?._id || originalTask.mainAssignee?._id || null,
+//             organization: todayTask.organization?._id || originalTask.organization?._id || null,
+//             assignedTo: pendingAssignees,
+//             overdueSince: now.toDate(),
+//             status: "pending",
+//         });
+
+//         console.log(`⏰ Added/Updated delayed task: ${todayTask.title || originalTask.title} (${pendingAssignees.length} pending users)`);
+//     }
+
+//     console.log("✅ Finished checking overdue tasks for TodayTask");
+// };
+// export const detectOverdueTasks = async () => {
+//     const now = dayjs().tz("Asia/Jerusalem");
+//     const todayStart = now.startOf("day").toDate();
+//     const todayEnd = now.endOf("day").toDate();
+
+//     console.log(`🌙 Checking overdue recurring tasks for ${now.format("YYYY-MM-DD")}`);
+
+//     // 1️⃣ שליפת משימות קבועות שעדיין פעילות
+//     const recurringTasks = await RecurringTask.find({
+//         status: { $nin: ["הושלם", "בוטלה"] },
+//         isDeleted: false,
+//     })
+//         .populate("assignees organization")
+//         .lean();
+
+//     for (const task of recurringTasks) {
+//         // 2️⃣ סינון ה-notes של היום (מתוך המשימה עצמה)
+//         const notesToday = (task.notes || []).filter(
+//             (n) => n.date >= todayStart && n.date <= todayEnd
+//         );
+
+//         // 3️⃣ עובדים שסיימו היום
+//         const completedUsers = notesToday
+//             .filter((n) => n.status === "הושלם")
+//             .map((n) => n.user?.toString());
+
+//         // 4️⃣ עובדים שלא השלימו
+//         const delayedUsers = (task.assignees || []).filter(
+//             (user) => !completedUsers.includes(user._id.toString())
+//         );
+
+//         // 5️⃣ יצירת רשומות DelayedTask רק למי שעדיין לא השלימו
+//         for (const user of delayedUsers) {
+//             const exists = await DelayedTask.findOne({
+//                 taskId: task._id,
+//                 taskModel: "RecurringTask",
+//                 userId: user._id,
+//                 date: { $gte: todayStart, $lte: todayEnd },
+//             });
+
+//             if (!exists) {
+//                 await DelayedTask.create({
+//                     taskId: task._id,
+//                     taskModel: "RecurringTask",
+//                     userId: user._id,
+//                     title: task.title || "ללא כותרת",
+//                     organization: task.organization?._id || task.organization || null,
+//                     status: "pending",
+//                     date: now.toDate(),
+//                     taskNumber: task.taskId,
+//                 });
+
+
+//                 console.log(`⏰ Added delayed recurring task: ${task.title} for ${user.name || user._id}`);
+//             }
+//         }
+//     }
+
+//     console.log("✅ Finished checking overdue recurring tasks");
+// };
 
 // export const detectOverdueTasks = async () => {
 //     const now = dayjs().tz('Asia/Jerusalem');
