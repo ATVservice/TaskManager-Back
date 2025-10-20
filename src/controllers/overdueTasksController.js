@@ -40,34 +40,30 @@ export const detectOverdueTasks = async () => {
             .map((n) => n.user?.toString());
 
         // 4️⃣ עובדים שלא השלימו
+
         const delayedUsers = (task.assignees || []).filter(
             (user) => !completedUsers.includes(user._id.toString())
         );
-
         // 5️⃣ יצירת רשומות DelayedTask רק למי שעדיין לא השלימו
-        for (const user of delayedUsers) {
-            const exists = await DelayedTask.findOne({
-                taskId: task._id,
+        if (delayedUsers.length > 0) {
+            await DelayedTask.deleteMany({
+                taskNumber: task.taskId,
                 taskModel: "RecurringTask",
-                userId: user._id,
-                date: { $gte: todayStart, $lte: todayEnd },
             });
 
-            if (!exists) {
-                await DelayedTask.create({
-                    taskId: task._id,
-                    taskModel: "RecurringTask",
-                    userId: user._id,
-                    title: task.title || "ללא כותרת",
-                    organization: task.organization?._id || task.organization || null,
-                    status: "pending",
-                    date: now.toDate(),
-                    taskNumber: task.taskId,
-                });
+            await DelayedTask.create({
+                taskId: task._id,
+                taskNumber: task.taskId,
+                taskModel: "RecurringTask",
+                assignedTo: delayedUsers.map(u => u._id),
+                mainAssignee: task.mainAssignee?._id || null,
+                organization: task.organization?._id || task.organization || null,
+                title: task.title || "ללא כותרת",
+                overdueSince: now.toDate(),
+                status: "pending",
+            });
 
-
-                console.log(`⏰ Added delayed recurring task: ${task.title} for ${user.name || user._id}`);
-            }
+            console.log(`⏰ Added delayed recurring task: ${task.title} (${delayedUsers.length} delayed users)`);
         }
     }
 
