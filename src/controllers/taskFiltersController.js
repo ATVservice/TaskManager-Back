@@ -2,6 +2,13 @@ import Task from '../models/Task.js';
 import TodayTask from '../models/TodayTask.js';
 import RecurringTask from '../models/RecurringTask.js';
 import TaskAssigneeDetails from '../models/TaskAssigneeDetails.js';
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+
 
 async function applyUserStatus(tasks, userId) {
     return Promise.all(
@@ -131,4 +138,40 @@ export const getRecurringTasks = async (req, res) => {
 
     res.status(200).json(tasks);
 };
+// משימות פתוחות מעוכבות
+export const getOverdueTasks = async (req, res) => {
+    try {
+      const userId = req.user._id;
+  
+      // נגדיר את תחילת היום הנוכחי (00:00)
+      const todayStart = dayjs().tz("Asia/Jerusalem").startOf('day').toDate();
+  
+      const baseFilter = getBaseFilter(req.user);
+  
+      const filter = {
+        ...baseFilter,
+        isRecurringInstance: false,
+        status: { $nin: ['בוטלה', 'הושלם'] },
+        $or: [
+          { finalDeadline: { $lt: todayStart } },
+          { dueDate: { $lt: todayStart } },
+        ],
+      };
+  
+      let tasks = await Task.find(filter)
+        .populate('mainAssignee', 'userName')
+        .populate('assignees', 'userName')
+        .populate('organization', 'name')
+        .populate('project', 'name');
+  
+      tasks = await applyUserStatus(tasks, userId);
+  
+      res.status(200).json(tasks);
+    } catch (err) {
+      console.error('שגיאה בשליפת משימות שעבר תאריך היעד:', err);
+      res.status(500).json({ error: 'שגיאה בשליפת משימות שעבר תאריך היעד' });
+    }
+  };
+  
+  
 
