@@ -109,12 +109,6 @@ export const getUserPerformance = async (req, res) => {
     try {
         const {employeeId, rangeType, from, to, groupBy = 'day' } = req.query;
         const targetId = employeeId || req.user.id;
-        console.log("Target ID for performance fetch:", targetId);
-
-        console.log("rangeType", rangeType)
-        console.log("from", from)
-        console.log("to", to)
-        console.log("groupBy", groupBy)
 
         const goals = await Goal.find({
             $or: [

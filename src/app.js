@@ -1,33 +1,36 @@
 import express from 'express';
+import path from "path";
+import compression from "compression";
+import cors from 'cors';
+import { fileURLToPath } from "url";
+import dotenv from 'dotenv';
+
+// כל הראוטים שלך
 import associationRoutes from './routes/associationRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
 import deleteTaskRoutes from './routes/deleteTaskRoutes.js';
-import updateTaskRoutes from './routes/updateTaskRoutes.js'
-import updateTodayTask from "./routes/updateTodayTaskRoutes.js"
-import restoreTaskRoutes from './routes/restoreTaskRoutes.js'
+import updateTaskRoutes from './routes/updateTaskRoutes.js';
+import updateTodayTask from "./routes/updateTodayTaskRoutes.js";
+import restoreTaskRoutes from './routes/restoreTaskRoutes.js';
 import taskFiltersRoutes from './routes/taskFiltersRoutes.js';
-import dashboardRoutes from './routes/dashboardRoutes.js'
-import adminDashboardRoutes from './routes/adminDashboardRoutes.js'
-import alertRoutes from './routes/alertRoutes.js'
-import goalRoutes from './routes/goalRoutes.js'
-import reportRoutes from './routes/reportRoutes.js'
-import projectRoutes from './routes/projectRoutes.js'
+import dashboardRoutes from './routes/dashboardRoutes.js';
+import adminDashboardRoutes from './routes/adminDashboardRoutes.js';
+import alertRoutes from './routes/alertRoutes.js';
+import goalRoutes from './routes/goalRoutes.js';
+import reportRoutes from './routes/reportRoutes.js';
+import projectRoutes from './routes/projectRoutes.js';
 import commentRoutes  from './routes/commentRoutes.js';
 import overdueTasksRoutes from './routes/overdueTasksRoutes.js';
-
-import cors from 'cors';
 import errorHandler from './middleware/errorMiddleware.js';
-import path from "path";
-import { fileURLToPath } from "url";
-import dotenv from 'dotenv';
 
+dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config();
 
 const app = express();
+app.use(compression());
 
 app.use(cors({
   origin: [
@@ -39,13 +42,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-  
 app.use(express.json());
 
-app.get('/', (req, res) => {
-  res.send('Server is running');
-});
-
+// כל ה-API Routes שלך
 app.use('/api/associations', associationRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -53,28 +52,34 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/taskFilters', taskFiltersRoutes);
 app.use('/api/delete', deleteTaskRoutes);
 app.use('/api/restore', restoreTaskRoutes);
-app.use('/api/update',updateTaskRoutes);
-app.use('/api/updateToday',updateTodayTask);
-app.use('/api/alert',alertRoutes);
-app.use('/api/dashboard',dashboardRoutes)
-app.use('/api/goal',goalRoutes)
-app.use('/api/report',reportRoutes)
-app.use('/api/adminDashboard',adminDashboardRoutes)
-app.use('/api/project',projectRoutes)
-app.use('/api/comment',commentRoutes)
-app.use('/api/overdueTasks',overdueTasksRoutes)
+app.use('/api/update', updateTaskRoutes);
+app.use('/api/updateToday', updateTodayTask);
+app.use('/api/alert', alertRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/goal', goalRoutes);
+app.use('/api/report', reportRoutes);
+app.use('/api/adminDashboard', adminDashboardRoutes);
+app.use('/api/project', projectRoutes);
+app.use('/api/comment', commentRoutes);
+app.use('/api/overdueTasks', overdueTasksRoutes);
 
+// סטטיים (React)
+app.use(express.static("build", {
+  maxAge: "1y",
+  etag: false,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith("index.html")) {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    }
+  },
+}));
 
-
-
-
-app.use(express.static(path.join(__dirname, "../client/build")));
-
-
+// כל מה שלא נתפס ב-API יגיע ל-React
 app.get(/^\/(?!api).*/, (req, res) => {
-  res.sendFile(path.resolve(__dirname, "../client/build", "index.html"));
+  res.sendFile(path.resolve("build", "index.html"));
 });
 
-
+// טיפול בשגיאות
 app.use(errorHandler);
+
 export default app;

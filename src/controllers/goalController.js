@@ -4,8 +4,6 @@ export const createGoal = async (req, res) => {
 
   let { targetType, employee, importance, subImportance, frequency, targetCount } = req.body.formData;
   targetCount = Number(targetCount);
-  console.log("req.body.formData", req.body.formData)
-  console.log("targetCount", targetCount)
 
 
 

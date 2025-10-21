@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "description": "",
+  "homepage": ".",
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",

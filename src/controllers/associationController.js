@@ -28,7 +28,6 @@ export const getAllAssociations = async (req, res) => {
 // מחזירה לכל עמותה את העובדים שלה
 export const getAssociatedEmployees = async (req, res) => {
     const { associationId } = req.params;
-    console.log('associationId:', associationId);
 
     if (!mongoose.Types.ObjectId.isValid(associationId)) {
         res.status(400);

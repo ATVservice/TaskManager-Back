@@ -182,7 +182,7 @@ export const generateWeeklyDrawerSummary = async () => {
         }
       }
   
-      console.log('✅ Weekly drawer summary alerts created');
+      // console.log('✅ Weekly drawer summary alerts created');
     } catch (err) {
       console.error('❌ Error generating weekly drawer summary:', err);
     }

@@ -38,7 +38,6 @@ const handleSoftDelete = async ({ entity, entityType, userId, isAdmin, isCreator
                 action: 'מחיקה',
                 user: userId,
             });
-            console.log(` LogDelete נוצר בהצלחה`);
         } catch (error) {
             console.error(` שגיאה ביצירת LogDelete:`, error);
         }
@@ -56,7 +55,6 @@ const handleSoftDelete = async ({ entity, entityType, userId, isAdmin, isCreator
                         }
                     }
                 );
-                console.log(` עודכנו ${updateResult.modifiedCount} TodayTask records`);
             } catch (error) {
                 console.error(` שגיאה בעדכון TodayTask:`, error);
             }
@@ -91,7 +89,6 @@ const handleSoftDelete = async ({ entity, entityType, userId, isAdmin, isCreator
 
         try {
             await entity.save();
-            console.log(` ${entityType} נשמר בהצלחה עם hiddenFrom`);
         } catch (error) {
             console.error(` שגיאה בשמירת ${entityType}:`, error);
             throw error;
@@ -106,7 +103,6 @@ const handleSoftDelete = async ({ entity, entityType, userId, isAdmin, isCreator
                         $addToSet: { hiddenFrom: userId }
                     }
                 );
-                console.log(` עודכנו ${updateResult.modifiedCount} TodayTask records עם hiddenFrom`);
             } catch (error) {
                 console.error(` שגיאה בעדכון TodayTask hiddenFrom:`, error);
             }
