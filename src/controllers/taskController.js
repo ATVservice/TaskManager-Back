@@ -306,7 +306,9 @@ export const duplicateTask = async (req, res) => {
 
 };
 export const getTaskById = async (req, res) => {
+
   const { taskId } = req.params;
+  console.log("Received taskId:", taskId);
 
   if (!taskId) {
     res.status(400);
@@ -314,11 +316,11 @@ export const getTaskById = async (req, res) => {
   }
 
   // חיפוש ראשון ב-Task רגיל
-  let task = await Task.findOne({ taskId: taskId })
+  let task = await Task.findOne({ _id: taskId })
     .lean();
 
   if (!task) {
-    task = await RecurringTask.findOne({ taskId: taskId })
+    task = await RecurringTask.findOne({ _id: taskId })
       .lean();
   }
 

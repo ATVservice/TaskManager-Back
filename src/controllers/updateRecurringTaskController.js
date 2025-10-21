@@ -232,7 +232,58 @@ export const updateRecurringTask = async (req, res) => {
       note: 'עדכון משימה קבועה'
     });
 
+    // אחרי שמירת ה-task
     await task.save();
+
+// ---------- עדכון משימות היום אם isDailyUpdate ----------
+const { isDailyUpdate } = req.body;
+if (isDailyUpdate) {
+  try {
+    const existingTodayTask = await TodayTask.findOne({
+      sourceTaskId: task._id,
+      taskModel: 'RecurringTask'
+    });
+
+    const taskForTodayNow = isTaskForToday(task, true);
+
+    if (taskForTodayNow) {
+      if (existingTodayTask) {
+        // עדכון בלבד של משימת היום הקיימת
+        await TodayTask.updateOne(
+          { _id: existingTodayTask._id },
+          { $set: {
+              title: task.title,
+              details: task.details,
+              importance: task.importance,
+              subImportance: task.subImportance,
+              mainAssignee: task.mainAssignee,
+              assignees: task.assignees,
+              project: task.project && task.project !== "" ? task.project : null,
+              organization: task.organization
+          }}
+        );
+        console.log(`Updated recurring task ${task._id} in TodayTask`);
+      } else {
+        // יצירת משימת היום אם לא קיימת
+        await TodayTask.create({
+          ...task.toObject(),
+          sourceTaskId: task._id,
+          taskModel: 'RecurringTask',
+          isRecurringInstance: false
+        });
+        console.log(`Created recurring task ${task._id} in TodayTask`);
+      }
+    } else if (existingTodayTask) {
+      // הסרה רק אם היא קיימת אך כבר לא רלוונטית להיום
+      await TodayTask.deleteOne({ _id: existingTodayTask._id });
+      console.log(`Removed recurring task ${task._id} from TodayTask`);
+    }
+  } catch (err) {
+    console.error('Error updating TodayTask for recurring task:', err);
+  }
+}
+
+
 
     // ---------- עדכון משימות היום לאחר השמירה ----------
     const isTaskForTodayAfterUpdate = isTaskForToday(task, true);

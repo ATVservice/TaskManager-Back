@@ -192,7 +192,7 @@ export const updateTask = async (req, res) => {
 
     // ---------- limited-permission branch (personal updates only) ----------
     if (permission === 'limited') {
-      const allowed = ['status', 'statusNote','finalDeadline','dueDate' ];
+      const allowed = ['status', 'statusNote', 'finalDeadline', 'dueDate'];
       const personalUpdates = {};
       for (const field of allowed) {
         if (updates[field] !== undefined) personalUpdates[field] = updates[field];
@@ -416,6 +416,7 @@ export const updateTask = async (req, res) => {
 
     await task.save();
 
+
     // --- existing logic של TodayTask ---
     if (task.dueDate) {
       const today = dayjs().startOf('day');
@@ -447,6 +448,65 @@ export const updateTask = async (req, res) => {
 
     // save and populate
     await task.save();
+
+    // ---------- daily update ----------
+    const { isDailyUpdate } = req.body; // בודק אם לשלוח עדכון גם ל-TodayTask
+    console.log('!!!!!!!isDailyUpdate flag:', isDailyUpdate);
+
+    if (isDailyUpdate) {
+      try {
+        // מחיקת המשימה היומית (אם קיימת) כדי למנוע כפילויות
+        await TodayTask.deleteMany({ sourceTaskId: task._id, isRecurringInstance: false });
+
+        // אם המשימה עדיין ליום הנוכחי, מחזירים אותה ל-TodayTask
+        if (task.dueDate) {
+          const todayStart = dayjs().startOf('day');
+          const todayEnd = dayjs().endOf('day');
+
+          if (dayjs(task.dueDate).isBetween(todayStart, todayEnd, null, '[]')) {
+            await TodayTask.create({
+              ...task.toObject(),
+              sourceTaskId: task._id,
+              taskModel: "Task",
+              isRecurringInstance: false
+            });
+            console.log(`✅ Task ${task._id} re-added to TodayTask`);
+          }
+        }
+      } catch (err) {
+        console.error('Error updating TodayTask:', err);
+        // אפשר לבחור אם להמשיך או להחזיר שגיאה
+      }
+    }
+    else {
+      // אחרי שמירת ה-Task עצמו
+
+      // --- עדכון TodayTask במידה ויש מופע ---
+      if (task.dueDate) {
+        const todayTask = await TodayTask.findOne({ sourceTaskId: task._id, isRecurringInstance: false });
+        if (todayTask) {
+          // עדכון השדות שהשתנו
+          const fieldsToUpdate = [
+            'title', 'details', 'importance', 'subImportance',
+            'status', 'statusNote', 'dueDate', 'finalDeadline',
+            'mainAssignee', 'assignees', 'project', 'organization'
+          ];
+          let hasChanges = false;
+          for (const field of fieldsToUpdate) {
+            if (!valuesEqual(todayTask[field], task[field])) {
+              todayTask[field] = task[field];
+              hasChanges = true;
+            }
+          }
+          if (hasChanges) {
+            await todayTask.save();
+            console.log(`✅ TodayTask ${todayTask._id} updated from Task ${task._id}`);
+          }
+        }
+      }
+
+    }
+
 
     // אם עודכן תאריך היעד להיום אז זה יתווסיף למשימות להיום
     //וכן להיפך, אם נדחה התאריך הוא יוסר ממשימות להיום 
