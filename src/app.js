@@ -65,10 +65,7 @@ app.use('/api/overdueTasks', overdueTasksRoutes);
 
 // סטטיים (React)
 app.use(express.static("build", {
-  maxAge: "1y",
-  etag: false,
   setHeaders: (res, filePath) => {
-    // אם זה index.html – אל תתני לו קאש
     if (filePath.endsWith("index.html")) {
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     } else {
@@ -76,6 +73,19 @@ app.use(express.static("build", {
     }
   },
 }));
+
+// app.use(express.static("build", {
+//   maxAge: "1y",
+//   etag: false,
+//   setHeaders: (res, filePath) => {
+//     // אם זה index.html – אל תתני לו קאש
+//     if (filePath.endsWith("index.html")) {
+//       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+//     } else {
+//       res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+//     }
+//   },
+// }));
 
 // app.use(express.static("build", {
 //   maxAge: "1y",
