@@ -3,11 +3,15 @@ import RecurringTask from '../models/RecurringTask.js';
 import User from '../models/User.js';
 import getNextTaskId from '../utils/getNextTaskId.js';
 import mongoose, { now } from 'mongoose';
-import dayjs from 'dayjs';
 import TodayTask from '../models/TodayTask.js';
 import TaskAssigneeDetails from '../models/TaskAssigneeDetails.js';
 import { isTaskForToday, addTaskToToday } from '../utils/TaskForToday.js';
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
 
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 export const createTask = async (req, res) => {
   const {
@@ -131,7 +135,8 @@ export const getTasks = async (req, res) => {
   const userId = req.user._id;
   const isAdmin = req.user.role === 'מנהל';
 
-  const today = dayjs().startOf('day').toDate();
+  const today = dayjs().tz("Asia/Jerusalem").startOf("day").toDate();
+
 
   let baseFilter = {
     isDeleted: false,
@@ -305,6 +310,7 @@ export const duplicateTask = async (req, res) => {
 
 
 };
+
 export const getTaskById = async (req, res) => {
 
   const { taskId } = req.params;

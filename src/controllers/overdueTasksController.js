@@ -12,7 +12,165 @@ import { updateRecurringTask } from './updateRecurringTaskController.js'
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
+export const detectOverdueTasks = async () => {
+    const now = dayjs().tz('Asia/Jerusalem');
+    const today = now.startOf('day').toDate();
+    const yesterday = now.subtract(1, 'day').startOf('day').toDate();
+    const yesterdayEnd = now.subtract(1, 'day').endOf('day').toDate();
 
+    console.log(`🌙 Starting overdue detection for ${now.format('YYYY-MM-DD HH:mm')}`);
+
+    // ============================================
+    // 1️⃣ משימות רגילות (Task) שעבר תאריך היעד שלהן
+    // ============================================
+    const overdueSingleTasks = await Task.find({
+        dueDate: { $lt: today },
+        status: { $nin: ['הושלם', 'בוטלה'] },
+        isDeleted: false
+    })
+        .populate('mainAssignee assignees organization')
+        .lean();
+
+    console.log(`📋 Found ${overdueSingleTasks.length} overdue single tasks`);
+
+    // ============================================
+    // 2️⃣ TodayTask רגילות (לא קבועות) של אתמול שלא הושלמו
+    // ============================================
+    const yesterdayTodayTasks = await TodayTask.find({
+        createdAt: { $gte: yesterday, $lte: yesterdayEnd },
+        taskModel: 'Task', // רק משימות רגילות!
+        status: { $nin: ['הושלם', 'בוטלה'] }
+    })
+        .populate('taskId mainAssignee assignees organization')
+        .lean();
+
+    console.log(`📅 Found ${yesterdayTodayTasks.length} yesterday's TodayTasks (regular) that weren't completed`);
+
+    // ============================================
+    // 3️⃣ משימות קבועות של אתמול שלא הושלמו
+    // ============================================
+    const yesterdayRecurringInstances = await TodayTask.find({
+        createdAt: { $gte: yesterday, $lte: yesterdayEnd },
+        isRecurringInstance: true,
+        taskModel: 'RecurringTask',
+        status: { $nin: ['הושלם', 'בוטלה'] }
+    })
+        .populate('sourceTaskId mainAssignee assignees organization')
+        .lean();
+
+    console.log(`🔄 Found ${yesterdayRecurringInstances.length} yesterday's recurring instances that weren't completed`);
+
+    // ============================================
+    // פונקציה לשמירה ב-DelayedTask
+    // ============================================
+    const saveIfNotExists = async (task, model, overdueSince) => {
+        try {
+            // בדיקה אם כבר קיים
+            const exists = await DelayedTask.findOne({
+                taskId: task._id,
+                taskModel: model,
+                status: 'pending'
+            });
+
+            if (exists) {
+                console.log(`⏭️  Already exists: ${task.title || 'ללא כותרת'}`);
+                return;
+            }
+
+            // וודא שיש organization
+            if (!task.organization) {
+                console.warn(`Skipping task without organization: ${task.title || 'ללא כותרת'} (${task._id})`);
+                return;
+            }
+
+            // יצירת רשומה חדשה
+            await DelayedTask.create({
+                taskId: task._id,
+                taskModel: model,
+                mainAssignee: task.mainAssignee?._id || null,
+                assignedTo: (task.assignees || []).map(a => a._id),
+                title: task.title || 'ללא כותרת',
+                overdueSince: overdueSince || task.dueDate || today,
+                organization: task.organization?._id || task.organization,
+                taskNumber: task.taskId || 0,
+                status: 'pending'
+            });
+
+            console.log(`Added delayed task: ${task.title || 'ללא כותרת'} (${model})`);
+        } catch (error) {
+            console.error(`rror saving delayed task ${task._id}:`, error);
+        }
+    };
+
+    // ============================================
+    // שמירת כל המשימות המתעכבות
+    // ============================================
+    
+    // 1. משימות רגילות שעבר תאריך היעד
+    for (const task of overdueSingleTasks) {
+        await saveIfNotExists(task, 'Task', task.dueDate);
+    }
+
+    // 2. TodayTask רגילות של אתמול
+    for (const todayTask of yesterdayTodayTasks) {
+        const originalTask = todayTask.taskId;
+        if (!originalTask) {
+            console.warn(`TodayTask ${todayTask._id} missing taskId reference`);
+            continue;
+        }
+
+        // בדוק אם יש TaskAssigneeDetails
+        const hasDetails = await TaskAssigneeDetails.exists({
+            taskId: originalTask._id,
+            taskModel: 'Task'
+        });
+
+        if (hasDetails) {
+            // בדוק אם כולם סיימו
+            const allDetails = await TaskAssigneeDetails.find({
+                taskId: originalTask._id,
+                taskModel: 'Task'
+            }).lean();
+
+            const allCompleted = allDetails.every(d => d.status === 'הושלם');
+            if (allCompleted) {
+                console.log(`✓ All assignees completed: ${originalTask.title}`);
+                continue;
+            }
+        }
+
+        await saveIfNotExists(originalTask, 'Task', yesterday);
+    }
+
+    // 3. משימות קבועות של אתמול
+    for (const recurringInstance of yesterdayRecurringInstances) {
+        const recurringTask = recurringInstance.sourceTaskId;
+        if (!recurringTask) {
+            console.warn(`Recurring instance ${recurringInstance._id} missing sourceTaskId`);
+            continue;
+        }
+
+        // בדוק אם יש note של אתמול עם הושלם
+        const yesterdayNote = (recurringTask.notes || []).find(note => {
+            const noteDate = dayjs(note.date).tz('Asia/Jerusalem').startOf('day');
+            return noteDate.isSame(yesterday, 'day') && note.status === 'הושלם';
+        });
+
+        if (yesterdayNote) {
+            console.log(`Recurring task completed yesterday: ${recurringTask.title}`);
+            continue;
+        }
+
+        await saveIfNotExists(recurringTask, 'RecurringTask', yesterday);
+    }
+
+    const totalDelayed = await DelayedTask.countDocuments({ status: 'pending' });
+    console.log(`\n Overdue detection complete:`);
+    console.log(`   - Single tasks: ${overdueSingleTasks.length}`);
+    console.log(`   - Yesterday's TodayTasks: ${yesterdayTodayTasks.length}`);
+    console.log(`   - Yesterday's recurring: ${yesterdayRecurringInstances.length}`);
+    console.log(`   - Total pending in DelayedTask: ${totalDelayed}\n`);
+};
 // export const detectOverdueTasks = async () => {
 //     const now = dayjs().tz("Asia/Jerusalem");
 //     const todayStart = now.startOf("day").toDate();
@@ -139,98 +297,98 @@ dayjs.extend(timezone);
 //     console.log("✅ Finished checking overdue recurring tasks");
 // };
 
-export const detectOverdueTasks = async () => {
-    const now = dayjs().tz('Asia/Jerusalem');
-    const today = now.startOf('day').toDate();
-    const yesterday = now.subtract(1, 'day').startOf('day').toDate();
+// export const detectOverdueTasks = async () => {
+//     const now = dayjs().tz('Asia/Jerusalem');
+//     const today = now.startOf('day').toDate();
+//     const yesterday = now.subtract(1, 'day').startOf('day').toDate();
 
 
-    // --- משימות רגילות ---
-    const singleTasks = await Task.find({ dueDate: { $lt: today }, isDeleted: false })
+//     // --- משימות רגילות ---
+//     const singleTasks = await Task.find({ dueDate: { $lt: today }, isDeleted: false })
 
-        .populate('mainAssignee assignees organization')
+//         .populate('mainAssignee assignees organization')
 
-        .lean();
+//         .lean();
 
-    // סינון לפי מי שסיים (TaskAssigneeDetails)
-    const overdueSingleTasks = singleTasks.filter((task) => {
-        const allDetails = task.taskAssigneeDetails || [];
-        const everyoneCompleted = allDetails.every((d) => d.status === 'הושלם');
-        return !everyoneCompleted; // נשארו שלא סיימו
-    });
+//     // סינון לפי מי שסיים (TaskAssigneeDetails)
+//     const overdueSingleTasks = singleTasks.filter((task) => {
+//         const allDetails = task.taskAssigneeDetails || [];
+//         const everyoneCompleted = allDetails.every((d) => d.status === 'הושלם');
+//         return !everyoneCompleted; // נשארו שלא סיימו
+//     });
 
-    // --- משימות קבועות אתמול ---
-    const yesterdayRecurringInstances = await TodayTask.find({
-        isRecurringInstance: true,
-        taskModel: 'RecurringTask',
-        createdAt: { $gte: yesterday, $lt: today },
-        status: { $ne: 'הושלם' },
-    })
-        .populate('sourceTaskId mainAssignee assignees organization')
-        .lean();
-    // 🟢 משימות קבועות של היום שלא הושלמו
-    const todayRecurringInstances = await TodayTask.find({
-        isRecurringInstance: true,
-        taskModel: 'RecurringTask',
-        status: { $nin: ['הושלם', 'בוטלה'] },
-    })
-        .populate('sourceTaskId mainAssignee assignees organization')
-        .lean();
+//     // --- משימות קבועות אתמול ---
+//     const yesterdayRecurringInstances = await TodayTask.find({
+//         isRecurringInstance: true,
+//         taskModel: 'RecurringTask',
+//         createdAt: { $gte: yesterday, $lt: today },
+//         status: { $ne: 'הושלם' },
+//     })
+//         .populate('sourceTaskId mainAssignee assignees organization')
+//         .lean();
+//     // 🟢 משימות קבועות של היום שלא הושלמו
+//     const todayRecurringInstances = await TodayTask.find({
+//         isRecurringInstance: true,
+//         taskModel: 'RecurringTask',
+//         status: { $nin: ['הושלם', 'בוטלה'] },
+//     })
+//         .populate('sourceTaskId mainAssignee assignees organization')
+//         .lean();
 
-    const overdueRecurringTasks = [];
-    for (const t of yesterdayRecurringInstances) {
-        const recurring = t.sourceTaskId;
-        if (!recurring) continue;
+//     const overdueRecurringTasks = [];
+//     for (const t of yesterdayRecurringInstances) {
+//         const recurring = t.sourceTaskId;
+//         if (!recurring) continue;
 
-        const userCompletedYesterday = recurring.notes?.some((note) => {
-            const noteDate = dayjs(note.date).tz('Asia/Jerusalem').startOf('day');
-            return noteDate.isSame(yesterday, 'day') && note.status === 'הושלם';
-        });
+//         const userCompletedYesterday = recurring.notes?.some((note) => {
+//             const noteDate = dayjs(note.date).tz('Asia/Jerusalem').startOf('day');
+//             return noteDate.isSame(yesterday, 'day') && note.status === 'הושלם';
+//         });
 
-        if (!userCompletedYesterday) {
-            overdueRecurringTasks.push(recurring);
-        }
-    }
+//         if (!userCompletedYesterday) {
+//             overdueRecurringTasks.push(recurring);
+//         }
+//     }
 
-    // --- שמירה בטבלת DelayedTasks ---
-    const saveIfNotExists = async (task, model) => {
-        const exists = await DelayedTask.findOne({
-            taskId: task._id,
-            taskModel: model,
-            status: 'pending',
-        });
-        if (!exists) {
+//     // --- שמירה בטבלת DelayedTasks ---
+//     const saveIfNotExists = async (task, model) => {
+//         const exists = await DelayedTask.findOne({
+//             taskId: task._id,
+//             taskModel: model,
+//             status: 'pending',
+//         });
+//         if (!exists) {
 
-            if (!task.organization) {
-                console.warn(`⚠️ Missing organization for task ${task._id} (${task.title || 'ללא כותרת'})`);
-                console.warn(`🔎 Full task data:`, task);
-                return;
-            }
+//             if (!task.organization) {
+//                 console.warn(`⚠️ Missing organization for task ${task._id} (${task.title || 'ללא כותרת'})`);
+//                 console.warn(`🔎 Full task data:`, task);
+//                 return;
+//             }
 
 
 
-            await DelayedTask.create({
-                taskId: task._id,
-                taskModel: model,
-                mainAssignee: task.mainAssignee?._id || null,
-                assignedTo: task.assignees?.map((a) => a._id) || [],
-                title: task.title || 'ללא כותרת',
-                overdueSince: task.dueDate || new Date(),
-                organization: task.organization?._id || task.organization || null,
-                taskNumber: task.taskId || 0,
-                status: 'pending',
+//             await DelayedTask.create({
+//                 taskId: task._id,
+//                 taskModel: model,
+//                 mainAssignee: task.mainAssignee?._id || null,
+//                 assignedTo: task.assignees?.map((a) => a._id) || [],
+//                 title: task.title || 'ללא כותרת',
+//                 overdueSince: task.dueDate || new Date(),
+//                 organization: task.organization?._id || task.organization || null,
+//                 taskNumber: task.taskId || 0,
+//                 status: 'pending',
 
-            });
-        }
-    };
+//             });
+//         }
+//     };
 
-    for (const t of overdueSingleTasks) await saveIfNotExists(t, 'Task');
-    for (const t of overdueRecurringTasks) await saveIfNotExists(t, 'RecurringTask');
+//     for (const t of overdueSingleTasks) await saveIfNotExists(t, 'Task');
+//     for (const t of overdueRecurringTasks) await saveIfNotExists(t, 'RecurringTask');
 
-    console.log(
-        `✅ Overdue tasks recorded: ${overdueSingleTasks.length} single, ${overdueRecurringTasks.length} recurring`
-    );
-};
+//     console.log(
+//         `✅ Overdue tasks recorded: ${overdueSingleTasks.length} single, ${overdueRecurringTasks.length} recurring`
+//     );
+// };
 
 export const getOverdueTasksForUser = async (req, res) => {
     try {
