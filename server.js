@@ -20,10 +20,10 @@ const URI = process.env.LOCAL_URI;
 mongoose.connect(URI)
   .then(async () => {
     console.log('Connected to MongoDB 😍');
-    // await populateDelayedTasks();
-    // mongoose.disconnect();
+    await populateDelayedTasks();
+    mongoose.disconnect();
 
-    cron.schedule("5 2 * * *", async () => {
+    cron.schedule("0 2 * * *", async () => {
       try {
         await runDailyUpdate();
         console.log('✅ Scheduled daily update completed');
