@@ -63,6 +63,20 @@ app.use('/api/project', projectRoutes);
 app.use('/api/comment', commentRoutes);
 app.use('/api/overdueTasks', overdueTasksRoutes);
 
+app.use((req, res, next) => {
+  const oldJson = res.json;
+  res.json = function(data) {
+    const size = JSON.stringify(data).length;
+    const sizeKB = (size / 1024).toFixed(2);
+    console.log(`📦 ${req.path} - ${sizeKB} KB`);
+    if (size > 500000) {
+      console.warn(`⚠️ תגובה גדולה! ${sizeKB} KB`);
+    }
+    return oldJson.call(this, data);
+  };
+  next();
+});
+
 // סטטיים (React)
 app.use(express.static("build", {
   setHeaders: (res, filePath) => {
@@ -73,29 +87,6 @@ app.use(express.static("build", {
     }
   },
 }));
-
-// app.use(express.static("build", {
-//   maxAge: "1y",
-//   etag: false,
-//   setHeaders: (res, filePath) => {
-//     // אם זה index.html – אל תתני לו קאש
-//     if (filePath.endsWith("index.html")) {
-//       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-//     } else {
-//       res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-//     }
-//   },
-// }));
-
-// app.use(express.static("build", {
-//   maxAge: "1y",
-//   etag: false,
-//   setHeaders: (res, filePath) => {
-//     if (filePath.endsWith("index.html")) {
-//       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-//     }
-//   },
-// }));
 
 // כל מה שלא נתפס ב-API יגיע ל-React
 app.get(/^\/(?!api).*/, (req, res) => {

@@ -132,7 +132,7 @@ export const createTask = async (req, res) => {
 };
 
 export const getTasks = async (req, res) => {
-  console.time('⏱️ Backend getTasks'); 
+  console.time('⏱️ Backend getTasks');
 
   const userId = req.user._id;
   const isAdmin = req.user.role === 'מנהל';
@@ -161,14 +161,15 @@ export const getTasks = async (req, res) => {
   console.time('⏱️ Query Tasks'); // בדיקה ספציפית לשאילתה
 
   const tasks = await Task.find(baseFilter)
+    .select('-__v -updatedAt -createdAt -followUp -deletedAt -deletedBy -hiddenFrom')
     .populate('mainAssignee', 'userName')
     .populate('organization', 'name')
     .populate('project', 'name')
     .lean();
-    console.timeEnd('⏱️ Query Tasks');
+  console.timeEnd('⏱️ Query Tasks');
 
 
-    console.time('⏱️ Get PersonalDetails');
+  console.time('⏱️ Get PersonalDetails');
 
   const userPersonalDetails = await TaskAssigneeDetails.find({
     user: userId,
@@ -186,7 +187,7 @@ export const getTasks = async (req, res) => {
 
   const tasksWithPersonal = tasks.map(task => {
     const personal = detailsMap.get(String(task._id));
- 
+
 
     return {
       ...task,
@@ -198,7 +199,7 @@ export const getTasks = async (req, res) => {
     };
   });
   console.timeEnd('⏱️ Merge Data');
-  console.timeEnd('⏱️ Backend getTasks'); 
+  console.timeEnd('⏱️ Backend getTasks');
 
 
   res.status(200).json(tasksWithPersonal);

@@ -95,6 +95,7 @@ export const getTodayTasks = async (req, res) => {
     console.log('Filter used:', filter);
 
     const tasks = await TodayTask.find(filter)
+      .select('-__v -updatedAt -createdAt -hiddenFrom')
       .populate('assignees', 'userName')
       .populate('mainAssignee', 'userName')
       .populate('organization', 'name')

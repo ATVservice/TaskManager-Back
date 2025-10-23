@@ -74,4 +74,17 @@ const taskSchema = new mongoose.Schema({
   }]
 });
 
+taskSchema.index({ 
+  isDeleted: 1, 
+  status: 1, 
+  dueDate: 1, 
+  mainAssignee: 1 
+});
+
+taskSchema.index({ 
+  isDeleted: 1, 
+  status: 1, 
+  dueDate: 1 
+});
+
 export default mongoose.model('Task', taskSchema);
