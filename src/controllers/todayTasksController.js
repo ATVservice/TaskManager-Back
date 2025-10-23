@@ -37,8 +37,8 @@ export const refreshTodayTasks = async () => {
     switch (task.frequencyType) {
       case 'יומי':
         return task.frequencyDetails?.includingFriday
-          ? now.day() >= 0 && now.day() <= 5  
-          : now.day() >= 0 && now.day() <= 4;  
+          ? now.day() >= 0 && now.day() <= 5
+          : now.day() >= 0 && now.day() <= 4;
       case 'יומי פרטני':
         result = task.frequencyDetails?.days?.includes(now.day());
         break;
@@ -79,7 +79,7 @@ export const getTodayTasks = async (req, res) => {
     const { isRecurringInstance } = req.query;
 
     const filter = {
-      isDeleted: { $ne: true } 
+      isDeleted: { $ne: true }
     };
     if (!isAdmin) {
       filter.$or = [
@@ -107,8 +107,7 @@ export const getTodayTasks = async (req, res) => {
     const today = dayjs().startOf('day');
 
     const updated = await Promise.all(
-      tasks.map(async (doc) => {
-        const task = doc.toObject();
+      tasks.map(async (task) => {
         console.log('Processing task:', task._id, task.taskModel);
 
         // --- מקרה 1: משימה קבועה ---
@@ -117,9 +116,9 @@ export const getTodayTasks = async (req, res) => {
             .findById(task.sourceTaskId)
             .select('notes');
 
-            if (recurring?.isDeleted || recurring?.hiddenFrom?.includes(req.user._id)) {
-              return null; 
-            }
+          if (recurring?.isDeleted || recurring?.hiddenFrom?.includes(req.user._id)) {
+            return null;
+          }
 
           const notes = Array.isArray(recurring?.notes) ? recurring.notes : [];
 
@@ -147,7 +146,7 @@ export const getTodayTasks = async (req, res) => {
         // --- מקרה 2: משימה רגילה ---
         if (task.taskModel === 'Task' && task.sourceTaskId) {
           const originalTask = await Task.findById(task.sourceTaskId).select('status statusNote isDeleted hiddenFrom');
-          
+
           // בדיקה שהמשימה המקורית לא נמחקה או מוסתרת
           if (originalTask?.isDeleted || originalTask?.hiddenFrom?.includes(req.user._id)) {
             return null; // נסנן אותה מהתוצאות

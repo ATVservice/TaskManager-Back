@@ -170,7 +170,7 @@ const expandRecurringTasks = (recurringTasks, dateFilter = null) => {
     // אם אין notes, זה אומר שהמשימה לא בוצעה אף פעם
     if (!task.notes || task.notes.length === 0) {
       expandedTasks.push({
-        ...task.toObject(),
+        ...task,
         taskType: 'קבועה',
         noteDate: null,
         noteStatus: task.status,
@@ -193,7 +193,7 @@ const expandRecurringTasks = (recurringTasks, dateFilter = null) => {
         }
 
         expandedTasks.push({
-          ...task.toObject(),
+          ...task,
           taskType: 'קבועה',
           noteDate: note.date,
           noteStatus: note.status,
@@ -326,7 +326,7 @@ export const getOpenTasksByEmployee = async (req, res) => {
     });
 
     const allTasks = [
-      ...regularTasks.map(t => ({ ...t.toObject(), taskType: 'רגילה', assigneeDetails: detailsByTask[t._id.toString()] || [] })),
+      ...regularTasks.map(t => ({ ...t, taskType: 'רגילה', assigneeDetails: detailsByTask[t._id.toString()] || [] })),
       ...expandedRecurringTasks.map(t => ({ ...t, taskType: 'קבועה', assigneeDetails: detailsByTask[t._id.toString()] || [] }))
     ];
 
@@ -903,7 +903,7 @@ export const getOverdueTasks = async (req, res) => {
 
     // שילוב המשימות
     const allOverdueTasks = [
-      ...overdueTasks.map(task => ({ ...task.toObject(), taskType: 'רגילה', isFromNote: false })),
+      ...overdueTasks.map(task => ({ ...task, taskType: 'רגילה', isFromNote: false })),
       ...expandedOverdueRecurringTasks
     ];
 
@@ -1543,7 +1543,7 @@ const processRecurringTasksByDays = async (recurringTasks, dateRange, userId) =>
 
       if (lastNote) {
         processedTasks.push({
-          ...task.toObject(),
+          ...task,
           taskType: 'קבועה',
           isFromNote: true,
           noteStatus: lastNote.status,
@@ -1577,7 +1577,7 @@ const processRegularTasksByDays = async (tasks, dateRange, userId) => {
 
         if (lastUpdate) {
           processedTasks.push({
-            ...task.toObject(),
+            ...task,
             taskType: 'רגילה',
             isFromNote: false,
             assigneeStatus: lastUpdate.status,
@@ -1591,7 +1591,7 @@ const processRegularTasksByDays = async (tasks, dateRange, userId) => {
       // אין טווח תאריכים -> לקחת את העדכון האחרון הקיים
       if (task.status === 'הושלם') {
         processedTasks.push({
-          ...task.toObject(),
+          ...task,
           taskType: 'רגילה',
           isFromNote: false,
           assigneeStatus: task.status,
@@ -1609,7 +1609,7 @@ const processRegularTasksByDays = async (tasks, dateRange, userId) => {
 
         if (lastUpdate && lastUpdate.status === 'הושלם') {
           processedTasks.push({
-            ...task.toObject(),
+            ...task,
             taskType: 'רגילה',
             isFromNote: false,
             assigneeStatus: lastUpdate.status,

@@ -69,7 +69,7 @@ export const getAllDeletedTasks = async (req, res) => {
     // 1. הוסף RecurringTasks מחוקות/מוסתרות
     recurringTasks.forEach(task => {
         if (shouldIncludeTask(task, 'RecurringTask')) {
-            uniqueTasks.push({ ...task.toObject(), type: 'RecurringTask' });
+            uniqueTasks.push({ ...task, type: 'RecurringTask' });
             addedTaskIds.add(`RecurringTask_${task._id.toString()}`);
         }
     });
@@ -77,7 +77,7 @@ export const getAllDeletedTasks = async (req, res) => {
     // 2. הוסף Tasks רגילות מחוקות/מוסתרות
     tasks.forEach(task => {
         if (shouldIncludeTask(task, 'Task')) {
-            uniqueTasks.push({ ...task.toObject(), type: 'Task' });
+            uniqueTasks.push({ ...task, type: 'Task' });
             addedTaskIds.add(`Task_${task._id.toString()}`);
         }
     });
@@ -96,7 +96,7 @@ export const getAllDeletedTasks = async (req, res) => {
         }
 
         if (!skipDueToSource && shouldIncludeTask(todayTask, 'TodayTask')) {
-            uniqueTasks.push({ ...todayTask.toObject(), type: 'TodayTask' });
+            uniqueTasks.push({ ...todayTask, type: 'TodayTask' });
             addedTaskIds.add(`TodayTask_${todayTask._id.toString()}`);
         }
     });
