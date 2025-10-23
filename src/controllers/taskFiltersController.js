@@ -9,31 +9,58 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 
-
 async function applyUserStatus(tasks, userId) {
-    return Promise.all(
-        tasks.map(async (task) => {
-            // אם מדובר במשימה שבוטלה - היא מנצחת תמיד
-            if (task.status === "בוטלה") {
-                return task;
-            }
+    // קבלי את כל הפרטים של המשתמש עבור כל המשימות בבת אחת
+    const allDetails = await TaskAssigneeDetails.find({
+        user: userId,
+        taskId: { $in: tasks.map(t => t._id) }
+    }).sort({ createdAt: -1 }).lean();
 
-            const details = await TaskAssigneeDetails.findOne({
-                taskId: task._id,
-                user: userId,
-            }).sort({ createdAt: -1 });
+    // הכיני מפה כדי לגשת לפרטים במהירות
+    const detailsMap = new Map();
+    for (const detail of allDetails) {
+        // שמרי רק את הפרט האחרון לכל משימה
+        if (!detailsMap.has(detail.taskId.toString())) {
+            detailsMap.set(detail.taskId.toString(), detail);
+        }
+    }
 
-            if (details) {
-                task = task.toObject(); // שיהיה ניתן לעדכן
-                task.status = details.status;
-                task.statusNote = details.statusNote || task.statusNote;
-            }
-
-
-            return task;
-        })
-    );
+    // עדכני את המשימות לפי המפה
+    return tasks.map(task => {
+        const detail = detailsMap.get(task._id.toString());
+        if (detail) {
+            task = task.toObject ? task.toObject() : task; // אם זה לא lean
+            task.status = detail.status;
+            task.statusNote = detail.statusNote || task.statusNote;
+        }
+        return task;
+    });
 }
+
+// async function applyUserStatus(tasks, userId) {
+//     return Promise.all(
+//         tasks.map(async (task) => {
+//             // אם מדובר במשימה שבוטלה - היא מנצחת תמיד
+//             if (task.status === "בוטלה") {
+//                 return task;
+//             }
+
+//             const details = await TaskAssigneeDetails.findOne({
+//                 taskId: task._id,
+//                 user: userId,
+//             }).sort({ createdAt: -1 });
+
+//             if (details) {
+//                 task = task.toObject(); // שיהיה ניתן לעדכן
+//                 task.status = details.status;
+//                 task.statusNote = details.statusNote || task.statusNote;
+//             }
+
+
+//             return task;
+//         })
+//     );
+// }
 
 const getBaseFilter = (user) => {
     if (user.role === 'מנהל') {

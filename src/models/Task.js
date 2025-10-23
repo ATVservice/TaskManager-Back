@@ -73,18 +73,40 @@ const taskSchema = new mongoose.Schema({
     note: String
   }]
 });
-
-taskSchema.index({ 
-  isDeleted: 1, 
-  status: 1, 
-  dueDate: 1, 
-  mainAssignee: 1 
+taskSchema.index({
+  isDeleted: 1,
+  hiddenFrom: 1,
+  mainAssignee: 1,
+  assignees: 1,
+  creator: 1,
+  status: 1,
+  dueDate: 1
 });
 
-taskSchema.index({ 
-  isDeleted: 1, 
-  status: 1, 
-  dueDate: 1 
+taskSchema.index({
+  isDeleted: 1,
+  status: 1,
+  dueDate: 1,
+  mainAssignee: 1
 });
+
+taskSchema.index({
+  isDeleted: 1,
+  status: 1,
+  dueDate: 1
+});
+taskSchema.index({
+  isDeleted: 1
+});
+taskSchema.index({
+  isDeleted: 1,
+  importance: 1,
+  updatedAt: 1
+});
+taskSchema.index({ assignees: 1 });
+taskSchema.index({ creator: 1 });
+taskSchema.index({ assignees: 1, dueDate: 1 });
+
+
 
 export default mongoose.model('Task', taskSchema);

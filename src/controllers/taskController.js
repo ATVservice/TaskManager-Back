@@ -144,11 +144,6 @@ export const getTasks = async (req, res) => {
     isDeleted: false,
     status: { $ne: "בוטלה" },
     dueDate: { $gt: today },
-    $expr: {
-      $not: {
-        $in: [userId, { $ifNull: ["$hiddenFrom", []] }]
-      }
-    }
   };
 
   if (!isAdmin) {
