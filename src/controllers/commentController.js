@@ -27,7 +27,8 @@ export const getComments = async (req, res) => {
     const Model = type === 'recurring' ? RecurringTask : Task;
 
     const doc = await Model.findById(_id)
-        .populate('comments.createdBy', 'userName');
+        .populate('comments.createdBy', 'userName')
+        .lean();
 
     if (!doc) throw new Error(`${type === 'recurring' ? 'משימה חוזרת' : 'משימה'} לא נמצאה`);
     return res.status(200).json(doc);

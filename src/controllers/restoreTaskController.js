@@ -21,7 +21,8 @@ const getDeletedEntities = async (Model, userId, isAdmin) => {
 
     return Model.find(query)
         .populate('organization', 'name')      
-        .populate('mainAssignee', 'userName');  
+        .populate('mainAssignee', 'userName')
+        .lean();
         
 };
 

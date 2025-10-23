@@ -33,7 +33,9 @@ export const getAssociatedEmployees = async (req, res) => {
         res.status(400);
         throw new Error('קוד עמותה לא תקין');
     }
-    const association = await Association.findById(associationId).populate('workers');
+    const association = await Association.findById(associationId)
+    .populate('workers')
+    .lean();
     if (!association) {
         res.status(404);
         throw new Error('עמותה לא נמצאה');

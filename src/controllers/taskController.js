@@ -160,7 +160,8 @@ export const getTasks = async (req, res) => {
   const tasks = await Task.find(baseFilter)
     .populate('mainAssignee', 'userName')
     .populate('organization', 'name')
-    .populate('project', 'name');
+    .populate('project', 'name')
+    .lean();
 
 
   const userPersonalDetails = await TaskAssigneeDetails.find({
@@ -208,7 +209,8 @@ export const getMoreDetails = async (req, res) => {
     .populate('mainAssignee', 'userName')
     .populate('project', 'name')
     .populate('failureReason', 'opton')
-    .populate('failureReason', 'customText');
+    .populate('failureReason', 'customText')
+    .lean();
 
 
   let taskType = 'Task';
@@ -219,7 +221,8 @@ export const getMoreDetails = async (req, res) => {
       .populate('assignees', 'userName')
       .populate('creator', 'userName')
       .populate('mainAssignee', 'userName')
-      .populate('project', 'name');
+      .populate('project', 'name')
+      .lean();
 
     taskType = 'RecurringTask';
 

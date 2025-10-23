@@ -534,9 +534,9 @@ export const updateTask = async (req, res) => {
 
 
     // populate fields for response clarity
-    await task.populate('organization');
-    await task.populate('mainAssignee');
-    await task.populate('assignees');
+    await task.populate('organization').lean();
+    await task.populate('mainAssignee').lean();
+    await task.populate('assignees').lean();
 
     // ----------------
     // המרת IDs לשמות קריאים לפני שמירת ההיסטוריה

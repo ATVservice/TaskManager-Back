@@ -29,6 +29,7 @@ export const getTaskHistory = async (req, res) => {
         const history = await TaskHistory.find(query)
             .sort({ date: -1 })
             .populate('user', 'userName')
+            .lean();
 
         res.json({ history });
 

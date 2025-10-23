@@ -157,7 +157,9 @@ const getAssigneeDetails = async (taskId, taskModel, userId = null) => {
   const query = { taskId, taskModel };
   if (userId) query.user = userId;
 
-  return await TaskAssigneeDetails.find(query).populate('user', 'firstName lastName userName');
+  return await TaskAssigneeDetails.find(query)
+    .populate('user', 'firstName lastName userName')
+    .lean();
 };
 
 // פונקציה חדשה להמרת משימות קבועות לביצועים נפרדים
@@ -288,7 +290,8 @@ export const getOpenTasksByEmployee = async (req, res) => {
       .populate('mainAssignee', 'firstName lastName userName role')
       .populate('assignees', 'firstName lastName userName role')
       .populate('organization', 'name')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     const recurringTasks = await RecurringTask.find(baseFilter)
       .populate('creator', 'firstName lastName userName role')
@@ -296,7 +299,8 @@ export const getOpenTasksByEmployee = async (req, res) => {
       .populate('assignees', 'firstName lastName userName role')
       .populate('organization', 'name')
       .populate('notes.user', 'firstName lastName userName role')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     const expandedRecurringTasks = expandRecurringTasks(recurringTasks, {
       startDate: req.query.startDate,
@@ -311,7 +315,9 @@ export const getOpenTasksByEmployee = async (req, res) => {
         { taskId: { $in: regularIds }, taskModel: 'Task' },
         { taskId: { $in: recurringIds }, taskModel: 'RecurringTask' }
       ]
-    }).populate('user', 'firstName lastName userName role');
+    })
+      .populate('user', 'firstName lastName userName role')
+      .lean();
 
     const detailsByTask = {};
     allAssigneeDetails.forEach(d => {
@@ -875,7 +881,8 @@ export const getOverdueTasks = async (req, res) => {
       .populate('mainAssignee', 'firstName lastName userName')
       .populate('assignees', 'firstName lastName userName')
       .populate('organization', 'name')
-      .sort({ finalDeadline: 1 });
+      .sort({ finalDeadline: 1 })
+      .lean();
 
     // משימות קבועות באיחור
     const overdueRecurringTasks = await RecurringTask.find(baseFilter)
@@ -884,7 +891,8 @@ export const getOverdueTasks = async (req, res) => {
       .populate('assignees', 'firstName lastName userName')
       .populate('organization', 'name')
       .populate('notes.user', 'firstName lastName userName')
-      .sort({ finalDeadline: 1 });
+      .sort({ finalDeadline: 1 })
+      .lean();
 
     // המרת משימות קבועות לביצועים נפרדים - רק אלה שלא הושלמו
     const expandedOverdueRecurringTasks = expandRecurringTasks(overdueRecurringTasks)
@@ -1665,7 +1673,8 @@ export const getEmployeePersonalStats = async (req, res) => {
 
       // שליפת משימות קבועות
       const recurringTasks = await RecurringTask.find(baseFilter)
-        .populate('notes.user', 'firstName lastName userName role');
+        .populate('notes.user', 'firstName lastName userName role')
+        .lean();
       console.log(`👤 ${employee.userName} | נמצאו ${recurringTasks.length} משימות קבועות`);
 
       // עיבוד משימות

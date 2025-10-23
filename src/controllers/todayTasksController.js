@@ -99,7 +99,8 @@ export const getTodayTasks = async (req, res) => {
       .populate('mainAssignee', 'userName')
       .populate('organization', 'name')
       .populate('creator', 'userName')
-      .populate('project', 'name');
+      .populate('project', 'name')
+      .lean();
 
     console.log('Tasks found:', tasks.length);
 
