@@ -64,5 +64,7 @@ const recurringTaskSchema = new mongoose.Schema({
     note: String
   }]
 });
+recurringTaskSchema.index({ dueDate: 1 });
+
 
 export default mongoose.model('RecurringTask', recurringTaskSchema);

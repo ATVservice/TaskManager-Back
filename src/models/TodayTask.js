@@ -30,4 +30,10 @@ const todayTaskSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+todayTaskSchema.index({ isDeleted: 1, mainAssignee: 1 });
+todayTaskSchema.index({ isDeleted: 1, assignees: 1 });
+todayTaskSchema.index({ isDeleted: 1, creator: 1 });
+todayTaskSchema.index({ isDeleted: 1, hiddenFrom: 1 });
+todayTaskSchema.index({ isDeleted: 1, isRecurringInstance: 1 });
+
 export default mongoose.model('TodayTask', todayTaskSchema);

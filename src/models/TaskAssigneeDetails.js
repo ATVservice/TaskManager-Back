@@ -11,5 +11,7 @@ const taskAssigneeDetailsSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 taskAssigneeDetailsSchema.index({ user: 1, taskModel: 1 });
+taskAssigneeDetailsSchema.index({ user: 1, taskId: 1 });
+
 
 export default mongoose.model('TaskAssigneeDetails', taskAssigneeDetailsSchema);
