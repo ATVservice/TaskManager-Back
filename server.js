@@ -1,3 +1,4 @@
+import http from "http";
 import app from './src/app.js';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
@@ -41,6 +42,13 @@ mongoose.connect(URI)
     }, { timezone: "Asia/Jerusalem" });
 
     const PORT = process.env.PORT || 5000;
+    const server = http.createServer(app);
+
+    // הגדרות לשמירת חיבור פתוח בין בקשות
+
+    server.keepAliveTimeout = 61 * 1000; // זמן חיבור פתוח
+    server.headersTimeout = 65 * 1000;   // סף סגירה אוטומטית של חיבור
+
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });

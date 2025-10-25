@@ -78,15 +78,25 @@ app.use((req, res, next) => {
 });
 
 // סטטיים (React)
-app.use(express.static("build", {
+app.use(express.static(path.join(__dirname, "build"), {
+  maxAge: "1y",
+  immutable: true,
   setHeaders: (res, filePath) => {
     if (filePath.endsWith("index.html")) {
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    } else {
-      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     }
   },
 }));
+
+// app.use(express.static("build", {
+//   setHeaders: (res, filePath) => {
+//     if (filePath.endsWith("index.html")) {
+//       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+//     } else {
+//       res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+//     }
+//   },
+// }));
 
 // כל מה שלא נתפס ב-API יגיע ל-React
 app.get(/^\/(?!api).*/, (req, res) => {

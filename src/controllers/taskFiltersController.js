@@ -82,132 +82,31 @@ const getBaseFilter = (user) => {
 // הושלמו
 export const getCompletedTasks = async (req, res) => {
     try {
-      const userId = req.user._id;
-      const baseFilter = getBaseFilter(req.user);
-  
-      // תחילה נשלוף את כל הסטטוסים של המשתמש בבת אחת
-      const userDetails = await TaskAssigneeDetails.find({
-        user: userId
-      }).sort({ createdAt: -1 }).lean();
-  
-      const detailsMap = new Map();
-      for (const d of userDetails) {
-        if (!detailsMap.has(d.taskId.toString())) {
-          detailsMap.set(d.taskId.toString(), d);
-        }
-      }
-  
-      // Aggregation pipeline
-      const tasks = await Task.aggregate([
-        { $match: baseFilter },
-  
-        // Main Assignee
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'mainAssignee',
-            foreignField: '_id',
-            as: 'mainAssignee'
-          }
-        },
-        { $unwind: '$mainAssignee' },
-  
-        // Assignees
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'assignees',
-            foreignField: '_id',
-            as: 'assignees'
-          }
-        },
-  
-        // Project
-        {
-          $lookup: {
-            from: 'projects',
-            localField: 'project',
-            foreignField: '_id',
-            as: 'project'
-          }
-        },
-        { $unwind: { path: '$project', preserveNullAndEmptyArrays: true } },
-  
-        // Organization
-        {
-          $lookup: {
-            from: 'associations',
-            localField: 'organization',
-            foreignField: '_id',
-            as: 'organization'
-          }
-        },
-        { $unwind: { path: '$organization', preserveNullAndEmptyArrays: true } },
-  
-        // בוחר רק את השדות שאנחנו רוצים
-        {
-          $project: {
-            _id: 1,
-            title: 1,
-            importance: 1,
-            status: 1,
-            statusNote: 1,
-            mainAssignee: { userName: 1, _id: 1 },
-            assignees: { userName: 1, _id: 1 },
-            project: { name: 1, _id: 1 },
-            organization: { name: 1, _id: 1 },
-          }
-        }
-      ]);
-  
-      // עכשיו מעדכנים את סטטוס המשתמש
-      const tasksWithStatus = tasks.map(task => {
-        const detail = detailsMap.get(task._id.toString());
-        if (detail) {
-          task.status = detail.status;
-          task.statusNote = detail.statusNote || task.statusNote;
-        }
-        return task;
-      });
-  
-      // מסננים שהושלמו
-      const completed = tasksWithStatus.filter(t => t.status === 'הושלם');
-  
-      res.json(completed);
-  
+        const userId = req.user._id;
+        const filter = {
+            ...getBaseFilter(req.user),
+        };
+
+        let tasks = await Task.find(filter)
+            .select('-__v -updatedAt -createdAt -followUp -deletedAt -deletedBy -hiddenFrom')
+            .populate('mainAssignee', 'userName')
+            .populate('assignees', 'userName')
+            .populate('organization', 'name')
+            .populate('project', 'name')
+            .lean();
+
+
+
+        tasks = await applyUserStatus(tasks, userId);
+
+        tasks = tasks.filter(t => t.status === 'הושלם');
+
+        res.json(tasks);
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: 'שגיאה בשליפת משימות שהושלמו' });
+        console.error(err);
+        res.status(500).json({ error: 'שגיאה בשליפת משימות שהושלמו' });
     }
-  };
-  
-// export const getCompletedTasks = async (req, res) => {
-//     try {
-//         const userId = req.user._id;
-//         const filter = {
-//             ...getBaseFilter(req.user),
-//         };
-
-//         let tasks = await Task.find(filter)
-//             .select('-__v -updatedAt -createdAt -followUp -deletedAt -deletedBy -hiddenFrom')
-//             .populate('mainAssignee', 'userName')
-//             .populate('assignees', 'userName')
-//             .populate('organization', 'name')
-//             .populate('project', 'name')
-//             .lean();
-
-
-
-//         tasks = await applyUserStatus(tasks, userId);
-
-//         tasks = tasks.filter(t => t.status === 'הושלם');
-
-//         res.json(tasks);
-//     } catch (err) {
-//         console.error(err);
-//         res.status(500).json({ error: 'שגיאה בשליפת משימות שהושלמו' });
-//     }
-// };
+};
 // בוטלו
 export const getCancelledTasks = async (req, res) => {
     const filter = {
