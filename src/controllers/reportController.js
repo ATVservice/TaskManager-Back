@@ -261,13 +261,35 @@ function buildTaskFilter(query) {
 // 1. דוח משימות פתוחות לפי עובדים
 export const getOpenTasksByEmployee = async (req, res) => {
   try {
-    const { status = ['בטיפול', 'לביצוע'] } = req.query;
-    const userId = req.user.id;
+    //  תיקון: טיפול נכון בפרמטר status
+    let status = req.query.status;
+    
+    // אם לא נשלח status, השתמש בברירת מחדל
+    if (!status || status === '') {
+      status = ['בטיפול', 'לביצוע'];
+    } 
+    // אם נשלח כמחרוזת, המר למערך
+    else if (typeof status === 'string') {
+      status = [status];
+    }
+    // אם נשלח כמערך, השאר כמו שהוא
+    else if (!Array.isArray(status)) {
+      status = ['בטיפול', 'לביצוע'];
+    }
 
+    console.log('🔍 סטטוסים מבוקשים:', status);
+
+    const userId = req.user.id;
     saveUserFilter(userId, 'openTasks', req.query);
 
     const { employeeId, ...filterParams } = req.query;
     let baseFilter = buildTaskFilter({ ...filterParams, status });
+
+    // 🔴 תיקון: הוספת סינון למשימות מבוטלות ומחוקות
+    baseFilter.status = { $nin: ['בוטל'] }; // לא כולל משימות מבוטלות
+    baseFilter.isDeleted = { $ne: true }; // לא כולל משימות מחוקות
+
+    console.log('🔍 פילטר בסיס:', JSON.stringify(baseFilter, null, 2));
 
     // המרת מזהי Mongo
     if (baseFilter.organization) {
@@ -284,7 +306,7 @@ export const getOpenTasksByEmployee = async (req, res) => {
       });
     }
 
-    // שליפת משימות רגילות וקבועות
+    // שליפת משימות רגילות
     const regularTasks = await Task.find(baseFilter)
       .populate('creator', 'firstName lastName userName role')
       .populate('mainAssignee', 'firstName lastName userName role')
@@ -293,6 +315,7 @@ export const getOpenTasksByEmployee = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    // שליפת משימות קבועות
     const recurringTasks = await RecurringTask.find(baseFilter)
       .populate('creator', 'firstName lastName userName role')
       .populate('mainAssignee', 'firstName lastName userName role')
@@ -302,6 +325,7 @@ export const getOpenTasksByEmployee = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    // הרחבת משימות קבועות לאירועים ספציפיים
     const expandedRecurringTasks = expandRecurringTasks(recurringTasks, {
       startDate: req.query.startDate,
       endDate: req.query.endDate
@@ -310,6 +334,7 @@ export const getOpenTasksByEmployee = async (req, res) => {
     const regularIds = regularTasks.map(t => t._id);
     const recurringIds = expandedRecurringTasks.map(t => t._id);
 
+    // שליפת פרטי משויכים נוספים
     const allAssigneeDetails = await TaskAssigneeDetails.find({
       $or: [
         { taskId: { $in: regularIds }, taskModel: 'Task' },
@@ -325,88 +350,209 @@ export const getOpenTasksByEmployee = async (req, res) => {
       detailsByTask[d.taskId.toString()].push(d);
     });
 
+    // איחוד כל המשימות
     const allTasks = [
       ...regularTasks.map(t => ({ ...t, taskType: 'רגילה', assigneeDetails: detailsByTask[t._id.toString()] || [] })),
       ...expandedRecurringTasks.map(t => ({ ...t, taskType: 'קבועה', assigneeDetails: detailsByTask[t._id.toString()] || [] }))
     ];
 
     const tasksByEmployee = {};
+    const debugLog = [];
 
     for (const task of allTasks) {
-      const employees = [];
+      // 🔴 תיקון: בדיקה נוספת לרמת משימה
+      if (task.status === 'בוטל' || task.isDeleted === true) {
+        debugLog.push({
+          taskId: task._id.toString(),
+          taskTitle: task.title,
+          taskStatus: task.status,
+          action: '🚫 נדחתה - משימה מבוטלת/מחוקה'
+        });
+        continue;
+      }
 
-      // מוסיפים יוצר, אחראי ראשי, אחראים משניים
-      if (task.creator) employees.push({ user: task.creator, role: 'יוצר' });
-      if (task.mainAssignee) employees.push({ user: task.mainAssignee, role: 'אחראי ראשי' });
+      const employees = [];
+      const taskId = task._id.toString();
+
+      // 🔴 רק אחראי ראשי - לא יוצר!
+      if (task.mainAssignee) {
+        employees.push({ 
+          user: task.mainAssignee, 
+          role: 'אחראי ראשי',
+          source: 'mainAssignee'
+        });
+      }
+
+      // 🔴 רק אחראים משניים - לא יוצר!
       if (task.assignees) {
         task.assignees.forEach(assignee => {
-          if (!task.mainAssignee || assignee._id.toString() !== task.mainAssignee._id.toString()) {
-            employees.push({ user: assignee, role: 'אחראי משני' });
+          const isMainAssignee = task.mainAssignee && assignee._id.toString() === task.mainAssignee._id.toString();
+          if (!isMainAssignee) {
+            employees.push({ 
+              user: assignee, 
+              role: 'אחראי משני',
+              source: 'assignees'
+            });
           }
         });
       }
 
-      // מוסיפים מה-TaskAssigneeDetails
+      // משויכים פרטניים
       if (task.assigneeDetails) {
         task.assigneeDetails.forEach(detail => {
-          employees.push({ user: detail.user, role: 'משויך פרטני', statusOverride: detail.status });
+          employees.push({ 
+            user: detail.user, 
+            role: 'משויך פרטני', 
+            statusOverride: detail.status,
+            source: 'assigneeDetails'
+          });
         });
       }
 
-      employees.forEach(emp => {
+      // עיבוד כל עובד
+      for (const emp of employees) {
         const empId = emp.user._id.toString();
+        
+        // חישוב הסטטוס האפקטיבי עבור העובד
+        let effectiveStatus = emp.statusOverride || task.status;
+        let statusSource = emp.statusOverride ? 'statusOverride' : 'task.status';
+        
+        // בדיקה אם יש הערות של העובד הספציפי
+        if (task.notes && task.notes.length > 0) {
+          const userNotes = task.notes.filter(n => n.user && n.user._id.toString() === empId);
+          if (userNotes.length > 0) {
+            userNotes.sort((a, b) => new Date(b.date) - new Date(a.date));
+            effectiveStatus = userNotes[0].status;
+            statusSource = 'userNote';
+          }
+        }
+
+        // 🔴 תיקון: סינון משימות לפי הסטטוס האפקטיבי
+        if (effectiveStatus === 'בוטל') {
+          debugLog.push({
+            taskId,
+            taskTitle: task.title,
+            employeeId: empId,
+            employeeName: `${emp.user.firstName} ${emp.user.lastName}`,
+            employeeRole: emp.role,
+            effectiveStatus,
+            statusSource,
+            action: '❌ נדחתה - סטטוס "בוטל"'
+          });
+          continue;
+        }
+
+        if (!status.includes(effectiveStatus)) {
+          debugLog.push({
+            taskId,
+            taskTitle: task.title,
+            employeeId: empId,
+            employeeName: `${emp.user.firstName} ${emp.user.lastName}`,
+            employeeRole: emp.role,
+            effectiveStatus,
+            statusSource,
+            allowedStatuses: status,
+            action: '❌ נדחתה - סטטוס לא מתאים'
+          });
+          continue;
+        }
+
+        // יצירת מבנה עובד אם לא קיים
         if (!tasksByEmployee[empId]) {
           tasksByEmployee[empId] = {
             employee: {
               id: emp.user._id,
               name: `${emp.user.firstName} ${emp.user.lastName}`,
-              userName: emp.user.userName,
-              role: emp.role
+              userName: emp.user.userName
             },
             tasks: [],
             summary: {
               total: 0,
-              totalRegular: 0,
-              totalRecurring: 0,
-              byImportance: {},
-              byStatus: {},
               overdue: 0,
+              byStatus: {},
               avgDaysOpen: 0,
               oldestOpenDays: 0
             }
           };
         }
 
-        // עדכון סטטוס לפי notes של אותו עובד בלבד
-        let effectiveStatus = emp.statusOverride || task.status;
-        if (task.notes && task.notes.length > 0) {
-          const userNotes = task.notes.filter(n => n.user && n.user._id.toString() === emp.user._id.toString());
-          if (userNotes.length > 0) {
-            userNotes.sort((a, b) => new Date(b.date) - new Date(a.date));
-            effectiveStatus = userNotes[0].status;
-          }
+        // בדיקה אם המשימה כבר נספרה עבור העובד הזה
+        const taskAlreadyExists = tasksByEmployee[empId].tasks.some(t => t._id.toString() === taskId);
+        
+        if (taskAlreadyExists) {
+          debugLog.push({
+            taskId,
+            taskTitle: task.title,
+            employeeId: empId,
+            employeeName: `${emp.user.firstName} ${emp.user.lastName}`,
+            employeeRole: emp.role,
+            effectiveStatus,
+            statusSource,
+            action: '⚠️ דולגים - כבר נספרה'
+          });
+          continue;
         }
 
-        // הוספת המשימה לדוח ללא סינון מוקדם
-        if (!tasksByEmployee[empId].tasks.some(t => t._id.toString() === task._id.toString())) {
-          tasksByEmployee[empId].tasks.push({ ...task, employeeRole: emp.role, status: effectiveStatus });
-          tasksByEmployee[empId].summary.total++;
-          if (task.taskType === 'רגילה') tasksByEmployee[empId].summary.totalRegular++;
-          else tasksByEmployee[empId].summary.totalRecurring++;
+        // הוספת המשימה לדוח
+        tasksByEmployee[empId].tasks.push({ 
+          ...task, 
+          employeeRole: emp.role,
+          employeeSource: emp.source,
+          status: effectiveStatus,
+          statusSource
+        });
 
-          tasksByEmployee[empId].summary.byImportance[task.importance] =
-            (tasksByEmployee[empId].summary.byImportance[task.importance] || 0) + 1;
+        // עדכון הסטטיסטיקות
+        tasksByEmployee[empId].summary.total++;
 
-          tasksByEmployee[empId].summary.byStatus[effectiveStatus] =
-            (tasksByEmployee[empId].summary.byStatus[effectiveStatus] || 0) + 1;
+        // ספירת משימות לפי סטטוס
+        tasksByEmployee[empId].summary.byStatus[effectiveStatus] =
+          (tasksByEmployee[empId].summary.byStatus[effectiveStatus] || 0) + 1;
 
-          if (task.finalDeadline) {
-            const today = new Date(); today.setHours(0, 0, 0, 0);
-            const taskDate = new Date(task.finalDeadline); taskDate.setHours(0, 0, 0, 0);
-            if (taskDate < today) tasksByEmployee[empId].summary.overdue++;
+        // 🔴 חישוב באיחור - רק אם יש תאריך סופי והוא עבר (לא כולל היום!)
+        if (task.finalDeadline && task.finalDeadline !== null) {
+          // יצירת תאריך של היום בשעון ישראל
+          const todayInIsrael = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }));
+          todayInIsrael.setHours(0, 0, 0, 0);
+          
+          // תאריך המשימה
+          const taskDate = new Date(task.finalDeadline);
+          taskDate.setHours(0, 0, 0, 0);
+          
+          // רק אם התאריך עבר (קטן מהיום, לא שווה!)
+          if (taskDate < todayInIsrael) {
+            tasksByEmployee[empId].summary.overdue++;
           }
         }
-      });
+        // משימות ללא תאריך סופי לא נספרות כמתעכבות
+
+        // חישוב isOverdue לצורך הלוג (בדיוק כמו בחישוב האמיתי)
+        let isOverdueForLog = false;
+        if (task.finalDeadline && task.finalDeadline !== null) {
+          const todayInIsraelLog = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }));
+          todayInIsraelLog.setHours(0, 0, 0, 0);
+          const taskDateLog = new Date(task.finalDeadline);
+          taskDateLog.setHours(0, 0, 0, 0);
+          isOverdueForLog = taskDateLog < todayInIsraelLog;
+        }
+
+        // לוג למעקב
+        debugLog.push({
+          taskId,
+          taskTitle: task.title,
+          taskType: task.taskType,
+          employeeId: empId,
+          employeeName: `${emp.user.firstName} ${emp.user.lastName}`,
+          employeeRole: emp.role,
+          employeeSource: emp.source,
+          effectiveStatus,
+          statusSource,
+          daysOpen: task.daysOpen || 0,
+          finalDeadline: task.finalDeadline ? new Date(task.finalDeadline).toLocaleDateString('he-IL') : 'אין תאריך',
+          isOverdue: isOverdueForLog,
+          action: '✅ נוספה לדוח'
+        });
+      }
     }
 
     // חישוב ממוצעים
@@ -420,18 +566,77 @@ export const getOpenTasksByEmployee = async (req, res) => {
     });
 
     let result = Object.values(tasksByEmployee);
+    
+    // סינון לפי עובד ספציפי אם נדרש
     if (employeeId) {
       result = result.filter(emp => emp.employee.id.toString() === employeeId);
+    }
+
+    // ספירת תוצאות לפי פעולה
+    const added = debugLog.filter(l => l.action.includes('✅')).length;
+    const rejected = debugLog.filter(l => l.action.includes('❌')).length;
+    const duplicates = debugLog.filter(l => l.action.includes('⚠️')).length;
+    const cancelled = debugLog.filter(l => l.action.includes('🚫')).length;
+
+    // הדפסת לוג מקוצר
+    console.log('\n=== דוח משימות פתוחות - סיכום ===');
+    console.log(`סה"כ משימות שנבדקו: ${allTasks.length}`);
+    console.log(`  - משימות רגילות: ${regularTasks.length}`);
+    console.log(`  - משימות קבועות (מורחבות): ${expandedRecurringTasks.length}`);
+    console.log(`סה"כ עובדים בדוח: ${result.length}`);
+    console.log(`סטטוסים מותרים: ${JSON.stringify(status)}`);
+    
+    console.log(`\nסיכום עיבוד:`);
+    console.log(`  ✅ משימות שנוספו: ${added}`);
+    console.log(`  ❌ משימות שנדחו: ${rejected}`);
+    console.log(`  ⚠️ כפילויות שנמנעו: ${duplicates}`);
+    console.log(`  🚫 משימות מבוטלות/מחוקות: ${cancelled}`);
+    
+    // הצגת 10 המשימות הראשונות שנוספו
+    if (added > 0) {
+      console.log('\n--- דוגמאות למשימות שנוספו (עד 10) ---');
+      debugLog
+        .filter(l => l.action.includes('✅'))
+        .slice(0, 10)
+        .forEach(log => {
+          console.log(`✅ ${log.taskTitle} [${log.taskType}]`);
+          console.log(`   עובד: ${log.employeeName} | תפקיד: ${log.employeeRole}`);
+          console.log(`   סטטוס: ${log.effectiveStatus} | ימים: ${log.daysOpen} | באיחור: ${log.isOverdue ? 'כן' : 'לא'}`);
+        });
+    }
+
+    // הצגת 10 המשימות הראשונות שנדחו
+    if (rejected > 0) {
+      console.log('\n--- דוגמאות למשימות שנדחו (עד 10) ---');
+      debugLog
+        .filter(l => l.action.includes('❌'))
+        .slice(0, 10)
+        .forEach(log => {
+          console.log(`❌ ${log.taskTitle}`);
+          console.log(`   עובד: ${log.employeeName || 'N/A'}`);
+          console.log(`   סטטוס אפקטיבי: ${log.effectiveStatus || log.taskStatus}`);
+          console.log(`   סטטוסים מותרים: ${JSON.stringify(log.allowedStatuses || status)}`);
+        });
     }
 
     res.json({
       success: true,
       data: result,
       totalTasks: allTasks.length,
-      appliedFilters: req.query
+      appliedFilters: req.query,
+      debug: {
+        totalEmployees: result.length,
+        regularTasks: regularTasks.length,
+        recurringTasks: expandedRecurringTasks.length,
+        tasksAdded: added,
+        tasksRejected: rejected,
+        tasksDuplicates: duplicates,
+        tasksCancelled: cancelled,
+        allowedStatuses: status
+      }
     });
   } catch (err) {
-    console.error(err);
+    console.error('❌ שגיאה בדוח משימות פתוחות:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 };

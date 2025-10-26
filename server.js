@@ -25,7 +25,7 @@ mongoose.connect(URI)
     // mongoose.disconnect();
     
     
-    cron.schedule("55 3 * * *", async () => {
+    cron.schedule("15 0 * * *", async () => {
       console.log("🚀 Cron triggered at", new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' }));
       try {
         await runDailyUpdate();
@@ -35,11 +35,11 @@ mongoose.connect(URI)
       }
     }, { timezone: "Asia/Jerusalem" });
 
-    cron.schedule("58 3 * * 0", async () => {
+    cron.schedule("30 0 * * 0", async () => {
       generateWeeklyDrawerSummary();
     }, { timezone: "Asia/Jerusalem" });
 
-    cron.schedule("0 4 * * *", () => {
+    cron.schedule("45 0 * * *", () => {
       generateAlerts();
     }, { timezone: "Asia/Jerusalem" });
 

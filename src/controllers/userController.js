@@ -4,7 +4,7 @@ import User from "../models/User.js";
 import bcrypt from 'bcrypt';
 
 export const getAllEmployees = async (req, res) => {
-  const employees = await User.find({ role: 'עובד' });
+  const employees = await User.find();
   return res.status(200).json(employees);
 };
 

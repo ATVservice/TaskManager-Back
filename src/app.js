@@ -35,6 +35,7 @@ app.use(compression());
 app.use(cors({
   origin: [
     'https://taskmanager-front-production.up.railway.app',
+    'https://task-manager.atvclients.workers.dev',
     'http://localhost:3000'
   ],
   credentials: true,
